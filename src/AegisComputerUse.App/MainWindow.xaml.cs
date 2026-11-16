@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -12,6 +13,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using AegisComputerUse.App.Controls;
@@ -77,6 +79,10 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<AttachmentViewItem> _attachments = [];
     private readonly ObservableCollection<CreatedFileViewItem> _createdFiles = [];
     private readonly ObservableCollection<ChatEntry> _chatEntries = [];
+    private readonly ObservableCollection<ChatSessionItem> _chatSessions = [];
+    private ChatSessionItem? _activeSession;
+    private readonly ObservableCollection<DetectedModelCardItem> _detectedModels = [];
+    private bool _isSidebarCollapsed;
     private readonly ObservableCollection<ModelMenuItem> _popupModelItems = [];
     private readonly ObservableCollection<ConfiguredModelViewItem> _settingsModelItems = [];
     private readonly ObservableCollection<WindowScopeItem> _scopeItems = [];
@@ -138,6 +144,8 @@ public partial class MainWindow : Window
         AttachmentsList.ItemsSource = _attachments;
         CreatedFilesList.ItemsSource = _createdFiles;
         ChatItems.ItemsSource = _chatEntries;
+        ChatSessionsList.ItemsSource = _chatSessions;
+        DetectedModelsList.ItemsSource = _detectedModels;
         ModelRowsControl.ItemsSource = _popupModelItems;
         ConfiguredModelsList.ItemsSource = _settingsModelItems;
         WindowScopeRows.ItemsSource = _scopeItems;
@@ -147,7 +155,9 @@ public partial class MainWindow : Window
         _chatEntries.CollectionChanged += (_, _) =>
             EmptyStatePanel.Visibility = _chatEntries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
+        CreateNewChatSession("Диалог 1");
         SandboxPathText.Text = _sandboxRoot;
+        UpdateSidebarDirectoryUi();
         RefreshHardeningBadge();
         TryAutoLoadDpapiVault();
         PopulateProviderVersions(_selectedSettingsProvider);
@@ -334,14 +344,42 @@ public partial class MainWindow : Window
         SettingsAddErrorText.Visibility = Visibility.Collapsed;
         SettingsAddSuccessText.Visibility = Visibility.Collapsed;
         SettingsOverlay.Visibility = Visibility.Visible;
+
+        var fadeIn = new DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(200))
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+        };
+        var slideUp = new DoubleAnimation(24.0, 0.0, TimeSpan.FromMilliseconds(220))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        SettingsOverlay.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+        SettingsModalTranslate.BeginAnimation(TranslateTransform.YProperty, slideUp);
+    }
+
+    internal void CloseSettingsModal()
+    {
+        var fadeOut = new DoubleAnimation(1.0, 0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
+        };
+        var slideDown = new DoubleAnimation(0.0, 16.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+        };
+        fadeOut.Completed += (_, _) =>
+        {
+            SettingsOverlay.Visibility = Visibility.Collapsed;
+        };
+        SettingsOverlay.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+        SettingsModalTranslate.BeginAnimation(TranslateTransform.YProperty, slideDown);
     }
 
     private void OnOpenSettingsClick(object sender, RoutedEventArgs e) => OpenSettingsModal("Models");
 
-    private void OnCloseSettingsClick(object sender, RoutedEventArgs e) => SettingsOverlay.Visibility = Visibility.Collapsed;
+    private void OnCloseSettingsClick(object sender, RoutedEventArgs e) => CloseSettingsModal();
 
-    private void OnSettingsBackdropMouseDown(object sender, MouseButtonEventArgs e) =>
-        SettingsOverlay.Visibility = Visibility.Collapsed;
+    private void OnSettingsBackdropMouseDown(object sender, MouseButtonEventArgs e) => CloseSettingsModal();
 
     private void OnSettingsModalContentMouseDown(object sender, MouseButtonEventArgs e) => e.Handled = true;
 
@@ -370,6 +408,7 @@ public partial class MainWindow : Window
             ProviderGoogleBtn.Style = (Style)FindResource(provider == AiProviderKind.GoogleGemini ? "PrimaryButton" : "DarkButton");
             ProviderOpenAiBtn.Style = (Style)FindResource(provider == AiProviderKind.OpenAI ? "PrimaryButton" : "DarkButton");
             ProviderAnthropicBtn.Style = (Style)FindResource(provider == AiProviderKind.Anthropic ? "PrimaryButton" : "DarkButton");
+            _detectedModels.Clear();
             PopulateProviderVersions(provider);
         }
     }
@@ -588,7 +627,42 @@ public partial class MainWindow : Window
                 PopulateProviderVersions(targetProvider);
             }
 
-            SettingsAddSuccessText.Text = $"✓ Загружено моделей по ключу ({AiProviderCatalog.GetProviderDisplayName(targetProvider)}): {discovered.Count} шт. Выберите версию в списке выше и нажмите «＋ Добавить нейросеть».";
+            _detectedModels.Clear();
+            foreach (var m in discovered)
+            {
+                bool isRecommended = m.ModelId.Contains("flash", StringComparison.OrdinalIgnoreCase) && !m.ModelId.Contains("argon", StringComparison.OrdinalIgnoreCase);
+                bool isArgon = m.ModelId.Contains("argon", StringComparison.OrdinalIgnoreCase);
+
+                string badge = isRecommended ? "⚡ Рекомендуется • Голос, экран, файлы" :
+                               isArgon ? "⚠ Требует Pay-as-you-go" :
+                               m.DisplayName.Contains("Pro") ? "🧠 Глубокие рассуждения" : "✓ Доступно";
+
+                Brush badgeBg = isRecommended ? BrushFromHex("#064E3B") :
+                                isArgon ? BrushFromHex("#3B1D11") : BrushFromHex("#1E293B");
+                Brush badgeFg = isRecommended ? BrushFromHex("#34D399") :
+                                isArgon ? BrushFromHex("#F97316") : BrushFromHex("#94A3B8");
+
+                string status = isArgon ? "Free Tier: 0 лимит" : "✓ Квота доступна";
+                Brush statusBrush = isArgon ? BrushFromHex("#F59E0B") : BrushFromHex("#34D399");
+
+                _detectedModels.Add(new DetectedModelCardItem(
+                    ModelId: m.ModelId,
+                    DisplayName: m.DisplayName,
+                    BadgeText: badge,
+                    BadgeBackground: badgeBg,
+                    BadgeForeground: badgeFg,
+                    StatusText: status,
+                    StatusBrush: statusBrush,
+                    Description: m.Notes,
+                    ActionBtnText: "⚡ Подключить",
+                    CardBackground: BrushFromHex("#11151F"),
+                    CardBorder: isRecommended ? BrushFromHex("#1D4ED8") : BrushFromHex("#222A3B"),
+                    TitleBrush: isRecommended ? BrushFromHex("#60A5FA") : BrushFromHex("#F1F5F9"),
+                    CatalogItem: m
+                ));
+            }
+
+            SettingsAddSuccessText.Text = $"✓ Найдено {discovered.Count} доступных нейросетей по вашему ключу! Нажмите «⚡ Подключить» на любой карточке.";
             SettingsAddSuccessText.Visibility = Visibility.Visible;
         }
         catch (GeminiApiException ex) when (ex.StatusCode is 401 or 403)
@@ -608,7 +682,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            LoadModelsFromKeyBtn.Content = "🔄 По ключу";
+            LoadModelsFromKeyBtn.Content = "⚡ Определить доступные модели";
             LoadModelsFromKeyBtn.IsEnabled = true;
         }
     }
@@ -789,6 +863,87 @@ public partial class MainWindow : Window
         {
             SettingsAddErrorText.Text = LogRedactor.Redact(ex.Message);
             SettingsAddErrorText.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void OnSelectDetectedModelClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: DetectedModelCardItem item })
+        {
+            SelectAndAddDetectedModel(item);
+        }
+    }
+
+    private void SelectAndAddDetectedModel(DetectedModelCardItem item)
+    {
+        SettingsAddErrorText.Visibility = Visibility.Collapsed;
+        SettingsAddSuccessText.Visibility = Visibility.Collapsed;
+        try
+        {
+            if (SettingsApiKeyBox.SecurePassword.Length == 0)
+                throw new InvalidOperationException("Введите API-ключ в поле выше.");
+
+            bool persist = SettingsPersistVaultCheck.IsChecked == true;
+            if (persist && _multiVault.VaultExists && _multiVault.RequiresPassphrase() && SettingsMasterPassBox.SecurePassword.Length == 0)
+            {
+                throw new InvalidOperationException("Текущий Vault защищён мастер-паролем. Введите мастер-пароль в поле ниже либо снимите галочку для сохранения только в RAM.");
+            }
+
+            SealedSecret sealedKey = CreateTransientSealedSecretWithoutClearing(SettingsApiKeyBox);
+
+            for (int i = _configuredModels.Count - 1; i >= 0; i--)
+            {
+                var existing = _configuredModels[i];
+                if (existing.Provider == _selectedSettingsProvider &&
+                    string.Equals(existing.ModelId, item.ModelId, StringComparison.OrdinalIgnoreCase))
+                {
+                    existing.Dispose();
+                    _configuredModels.RemoveAt(i);
+                }
+            }
+
+            var newEntry = new ConfiguredModelEntry(
+                Guid.NewGuid().ToString("N"),
+                _selectedSettingsProvider,
+                item.ModelId,
+                item.DisplayName,
+                "MEDIUM",
+                persist,
+                sealedKey);
+
+            _configuredModels.Add(newEntry);
+            _activeModel = newEntry;
+
+            if (persist)
+            {
+                SavePersistedEntriesFromSettingsPassphrase();
+            }
+
+            RefreshConfiguredModelsUi();
+            RefreshUnifiedSelectorUi();
+            UpdateUsageUi();
+
+            CloseSettingsModal();
+
+            AddStatusCard(
+                "НЕЙРОСЕТЬ ПОДКЛЮЧЕНА",
+                $"{AiProviderCatalog.GetProviderDisplayName(newEntry.Provider)} • {newEntry.DisplayName} ({newEntry.ModelId}) подключена и выбрана для работы.",
+                "#10B981", "#0D201A", "#164E3A", "🤖");
+        }
+        catch (Exception ex)
+        {
+            SettingsAddErrorText.Text = LogRedactor.Redact(ex.Message);
+            SettingsAddErrorText.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void OnToggleManualVersionClick(object sender, RoutedEventArgs e)
+    {
+        if (ManualVersionSelectionPanel is not null)
+        {
+            ManualVersionSelectionPanel.Visibility = ManualVersionSelectionPanel.Visibility == Visibility.Visible
+                ? Visibility.Collapsed
+                : Visibility.Visible;
         }
     }
 
@@ -1458,14 +1613,147 @@ public partial class MainWindow : Window
 
     // ==================== Chat Controls & Sandbox ====================
 
-    private void OnClearChatClick(object sender, RoutedEventArgs e)
+    private void OnToggleSidebarClick(object sender, RoutedEventArgs e)
     {
+        _isSidebarCollapsed = !_isSidebarCollapsed;
+        double targetWidth = _isSidebarCollapsed ? 0 : 260;
+
+        if (!_isSidebarCollapsed)
+        {
+            SidebarBorder.Visibility = Visibility.Visible;
+            SidebarExpandBtn.Visibility = Visibility.Collapsed;
+        }
+
+        var anim = new DoubleAnimation(SidebarBorder.ActualWidth, targetWidth, TimeSpan.FromMilliseconds(220))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+        };
+
+        if (_isSidebarCollapsed)
+        {
+            anim.Completed += (_, _) =>
+            {
+                if (_isSidebarCollapsed)
+                {
+                    SidebarBorder.Visibility = Visibility.Collapsed;
+                    SidebarExpandBtn.Visibility = Visibility.Visible;
+                }
+            };
+        }
+
+        SidebarBorder.BeginAnimation(FrameworkElement.WidthProperty, anim);
+    }
+
+    private void OnNewChatSessionClick(object sender, RoutedEventArgs e) =>
+        CreateNewChatSession();
+
+    private void OnClearChatClick(object sender, RoutedEventArgs e) =>
+        CreateNewChatSession();
+
+    private void CreateNewChatSession(string? title = null)
+    {
+        SaveActiveSessionState();
+
         _history.Clear();
         _chatEntries.Clear();
         _lastUsage = null;
         _sessionCumulativeTokens = 0;
         UpdateUsageUi();
         CloseAllPopups();
+
+        string sessionTitle = title ?? $"Чат {_chatSessions.Count + 1}";
+        var newSession = new ChatSessionItem
+        {
+            Title = sessionTitle,
+            WorkingDirectory = _sandboxRoot,
+            IsActive = true
+        };
+
+        foreach (var s in _chatSessions) s.IsActive = false;
+        _chatSessions.Insert(0, newSession);
+        _activeSession = newSession;
+
+        if (SidebarChatCountText is not null)
+            SidebarChatCountText.Text = _chatSessions.Count.ToString();
+    }
+
+    private void SaveActiveSessionState()
+    {
+        if (_activeSession is null) return;
+        _activeSession.Entries = new List<ChatEntry>(_chatEntries);
+        _activeSession.History = new List<JsonNode>(_history);
+        _activeSession.LastUsage = _lastUsage;
+        _activeSession.CumulativeTokens = _sessionCumulativeTokens;
+        _activeSession.WorkingDirectory = _sandboxRoot;
+        _activeSession.NotifyAll();
+    }
+
+    private void OnChatSessionCardClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: ChatSessionItem session })
+        {
+            SwitchToChatSession(session);
+        }
+    }
+
+    private void SwitchToChatSession(ChatSessionItem session)
+    {
+        if (_activeSession == session) return;
+
+        SaveActiveSessionState();
+
+        foreach (var s in _chatSessions) s.IsActive = (s == session);
+        _activeSession = session;
+
+        _chatEntries.Clear();
+        foreach (var entry in session.Entries)
+            _chatEntries.Add(entry);
+
+        _history.Clear();
+        _history.AddRange(session.History);
+
+        _lastUsage = session.LastUsage;
+        _sessionCumulativeTokens = session.CumulativeTokens;
+        UpdateUsageUi();
+        CloseAllPopups();
+    }
+
+    private void OnDeleteChatSessionClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: ChatSessionItem session })
+        {
+            DeleteChatSession(session);
+        }
+    }
+
+    private void DeleteChatSession(ChatSessionItem session)
+    {
+        bool wasActive = session.IsActive;
+        _chatSessions.Remove(session);
+
+        if (_chatSessions.Count == 0)
+        {
+            CreateNewChatSession("Диалог 1");
+            return;
+        }
+
+        if (wasActive)
+        {
+            SwitchToChatSession(_chatSessions[0]);
+        }
+
+        if (SidebarChatCountText is not null)
+            SidebarChatCountText.Text = _chatSessions.Count.ToString();
+    }
+
+    private void UpdateSidebarDirectoryUi()
+    {
+        if (SidebarDirectoryText is null) return;
+        string dirName = Path.GetFileName(_sandboxRoot);
+        if (string.IsNullOrWhiteSpace(dirName))
+            dirName = _sandboxRoot;
+        SidebarDirectoryText.Text = dirName;
+        SidebarDirectoryText.ToolTip = $"Подключенная папка песочницы:\n{_sandboxRoot}";
     }
 
     private void OnExportReportClick(object sender, RoutedEventArgs e) => ExportSessionReport();
@@ -1559,6 +1847,11 @@ public partial class MainWindow : Window
                 _ = new SafeFileSandbox(dlg.FolderName);
                 _sandboxRoot = dlg.FolderName;
                 SandboxPathText.Text = _sandboxRoot;
+                UpdateSidebarDirectoryUi();
+                if (_activeSession is not null)
+                {
+                    _activeSession.WorkingDirectory = _sandboxRoot;
+                }
             }
             catch (Exception ex)
             {
@@ -2073,6 +2366,17 @@ public partial class MainWindow : Window
 
         if (string.IsNullOrWhiteSpace(prompt) && attachmentsSnapshot.Count == 0)
             return;
+
+        if (_activeSession is not null && (_activeSession.Title.StartsWith("Чат ") || _activeSession.Title.StartsWith("Диалог ") || _activeSession.Title == "Новый диалог"))
+        {
+            if (!string.IsNullOrWhiteSpace(prompt))
+            {
+                string cleanPrompt = prompt.Trim();
+                if (cleanPrompt.Length > 28) cleanPrompt = cleanPrompt[..26] + "…";
+                _activeSession.Title = cleanPrompt;
+                _activeSession.NotifyAll();
+            }
+        }
 
         var modelToRun = _activeModel;
         int maxSteps = GetConfiguredMaxSteps();
@@ -2868,4 +3172,70 @@ public partial class MainWindow : Window
     {
         public Visibility HasMessageImages => MessageImages.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    public sealed class ChatSessionItem : INotifyPropertyChanged
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString("N");
+        private string _title = "Новый диалог";
+        public string Title
+        {
+            get => _title;
+            set { _title = value; OnPropertyChanged(nameof(Title)); }
+        }
+
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+        public string WorkingDirectory { get; set; } = string.Empty;
+        public List<ChatEntry> Entries { get; set; } = [];
+        public List<JsonNode> History { get; set; } = [];
+        public GeminiUsageMetadata? LastUsage { get; set; }
+        public long CumulativeTokens { get; set; }
+
+        private bool _isActive;
+        public bool IsActive
+        {
+            get => _isActive;
+            set
+            {
+                _isActive = value;
+                OnPropertyChanged(nameof(IsActive));
+                OnPropertyChanged(nameof(BackgroundBrush));
+                OnPropertyChanged(nameof(BorderBrush));
+                OnPropertyChanged(nameof(TitleBrush));
+            }
+        }
+
+        public string FormattedDate => CreatedAt.Date == DateTime.Today
+            ? CreatedAt.ToString("HH:mm")
+            : CreatedAt.ToString("dd.MM HH:mm");
+
+        public string MessageCountText => Entries.Count == 0
+            ? "Пустой чат"
+            : $"{Entries.Count} сообщ.";
+
+        public Brush BackgroundBrush => IsActive ? BrushFromHex("#161F2E") : BrushFromHex("#10141D");
+        public Brush BorderBrush => IsActive ? BrushFromHex("#2563EB") : BrushFromHex("#1C2433");
+        public Brush TitleBrush => IsActive ? BrushFromHex("#7DD3FC") : BrushFromHex("#E2E8F0");
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        public void OnPropertyChanged(string prop) =>
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
+
+        public void NotifyAll() =>
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
+    }
+
+    public sealed record DetectedModelCardItem(
+        string ModelId,
+        string DisplayName,
+        string BadgeText,
+        Brush BadgeBackground,
+        Brush BadgeForeground,
+        string StatusText,
+        Brush StatusBrush,
+        string Description,
+        string ActionBtnText,
+        Brush CardBackground,
+        Brush CardBorder,
+        Brush TitleBrush,
+        ProviderModelCatalogItem CatalogItem);
 }

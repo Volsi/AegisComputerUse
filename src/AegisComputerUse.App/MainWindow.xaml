@@ -56,6 +56,19 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Sidebar Toggle Button -->
+                    <Button x:Name="SidebarToggleBtn"
+                            Content="☰"
+                            Style="{StaticResource GhostPillButton}"
+                            Width="28"
+                            Height="28"
+                            Padding="0"
+                            Margin="0,0,8,0"
+                            FontSize="13"
+                            ToolTip="Скрыть / показать панель чатов"
+                            WindowChrome.IsHitTestVisibleInChrome="True"
+                            Click="OnToggleSidebarClick"/>
+
                     <!-- Custom Crisp Vector Shield Mark -->
                     <Border Background="#121826"
                             BorderBrush="#253247"
@@ -111,9 +124,13 @@
                     </Border>
                 </StackPanel>
 
-                <StackPanel Grid.Column="2"
+                <!-- Middle Badges & Live Status (Auto-scroll / Clip if narrow) -->
+                <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
+                            HorizontalAlignment="Right"
                             VerticalAlignment="Center"
+                            Margin="0,0,8,0"
+                            ClipToBounds="True"
                             WindowChrome.IsHitTestVisibleInChrome="True">
                     <!-- Vault / Model Key Status Pill (clickable -> Settings) -->
                     <Button x:Name="TopKeyStatusBtn"
@@ -172,34 +189,14 @@
                                    FontSize="10.5"
                                    Foreground="#7B859A"/>
                     </Border>
+                </StackPanel>
 
-                    <Button Content="＋ Новый чат"
-                            Style="{StaticResource GhostPillButton}"
-                            FontSize="11.5"
-                            Padding="9,4"
-                            Margin="0,0,5,0"
-                            Click="OnClearChatClick"/>
-
-                    <Button Content="📄 Отчёт"
-                            Style="{StaticResource GhostPillButton}"
-                            FontSize="11.5"
-                            Padding="9,4"
-                            Margin="0,0,5,0"
-                            ToolTip="Экспорт аудиторского отчёта текущей сессии (Markdown / SafeFileSandbox)"
-                            Click="OnExportReportClick"/>
-
-                    <!-- Dedicated Settings Gear Button -->
-                    <Button x:Name="SettingsGearBtn"
-                            Content="⚙ Настройки"
-                            Style="{StaticResource DarkButton}"
-                            FontSize="11.5"
-                            Padding="10,4.5"
-                            Margin="0,0,8,0"
-                            ToolTip="Добавить нейросеть (Компания, Версия, API-ключ), Безопасность и Песочница"
-                            Click="OnOpenSettingsClick"/>
-
+                <!-- Dedicated Window Caption Controls (GUARANTEED PINNED TO FAR RIGHT) -->
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            WindowChrome.IsHitTestVisibleInChrome="True">
                     <Border Width="1" Height="18" Background="#222836" Margin="0,0,6,0" VerticalAlignment="Center"/>
-
                     <Button x:Name="WinMinBtn" Content="─" Style="{StaticResource CaptionButton}" ToolTip="Свернуть" Click="OnMinimizeClick"/>
                     <Button x:Name="WinMaxBtn" Style="{StaticResource CaptionButton}" ToolTip="Развернуть" Click="OnMaximizeRestoreClick">
                         <TextBlock x:Name="MaximizeGlyph" Text="□" FontSize="12"/>
@@ -209,12 +206,185 @@
             </Grid>
         </Border>
 
-        <!-- Clean Full-Width Chat Canvas + Floating Composer -->
+        <!-- Work Area: Left Sidebar (Collapsible) + Main Chat Area -->
         <Grid Grid.Row="1" Background="#0B0D12">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="SidebarColumn" Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- LEFT SIDEBAR: Chat History & Working Directory -->
+            <Border Grid.Column="0"
+                    x:Name="SidebarBorder"
+                    Width="260"
+                    Background="#0D1017"
+                    BorderBrush="#1A202C"
+                    BorderThickness="0,0,1,0"
+                    ClipToBounds="True">
+                <Grid Width="260">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Sidebar Header: Title, Count, Collapse, New Chat & Directory -->
+                    <StackPanel Grid.Row="0">
+                        <!-- Top Row: Title + Collapse -->
+                        <Grid Margin="12,12,10,8">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="💬" FontSize="13" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Чаты" FontSize="13" FontWeight="SemiBold" Foreground="#E2E8F0" VerticalAlignment="Center"/>
+                                <Border Background="#1E293B" CornerRadius="8" Padding="6,1.5" Margin="6,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="SidebarChatCountText" Text="1" FontSize="10.5" Foreground="#94A3B8"/>
+                                </Border>
+                            </StackPanel>
+                            <Button Content="◀"
+                                    HorizontalAlignment="Right"
+                                    Width="26" Height="26"
+                                    Padding="0"
+                                    Style="{StaticResource GhostPillButton}"
+                                    ToolTip="Свернуть панель чатов"
+                                    Click="OnToggleSidebarClick"/>
+                        </Grid>
+
+                        <!-- Primary "+ Новый чат" Action Button -->
+                        <Button x:Name="NewChatSidebarBtn"
+                                Content="＋ Новый чат"
+                                Style="{StaticResource PrimaryButton}"
+                                Padding="10,8"
+                                FontSize="12.5"
+                                FontWeight="Medium"
+                                Margin="12,0,12,8"
+                                HorizontalAlignment="Stretch"
+                                Click="OnNewChatSessionClick"/>
+
+                        <!-- Connected Working Directory Card -->
+                        <Border Background="#121622"
+                                BorderBrush="#222B3D"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="10,7"
+                                Margin="12,0,12,10"
+                                ToolTip="Текущая безопасная папка (песочница для создаваемых файлов, скриншотов и кода)">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="📁" FontSize="13" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Рабочая папка" FontSize="10" Foreground="#64748B"/>
+                                    <TextBlock x:Name="SidebarDirectoryText"
+                                               Text="AegisWorkspace"
+                                               FontSize="11"
+                                               FontWeight="Medium"
+                                               Foreground="#38BDF8"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                                <Button Grid.Column="2"
+                                        Content="⋯"
+                                        Style="{StaticResource GhostPillButton}"
+                                        Width="22" Height="22"
+                                        Padding="0"
+                                        ToolTip="Сменить рабочую папку"
+                                        Click="OnPickSandboxClick"/>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Middle: Scrollable Chat History List -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="8,0">
+                        <ItemsControl x:Name="ChatSessionsList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,5"
+                                            CornerRadius="8"
+                                            Background="{Binding BackgroundBrush}"
+                                            BorderBrush="{Binding BorderBrush}"
+                                            BorderThickness="1"
+                                            Padding="10,8"
+                                            Cursor="Hand"
+                                            MouseLeftButtonUp="OnChatSessionCardClick">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="{Binding Title}"
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Foreground="{Binding TitleBrush}"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                    <TextBlock Text="{Binding FormattedDate}" FontSize="10" Foreground="#64748B"/>
+                                                    <TextBlock Text=" • " FontSize="10" Foreground="#475569"/>
+                                                    <TextBlock Text="{Binding MessageCountText}" FontSize="10" Foreground="#64748B"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                            <Button Grid.Column="1"
+                                                    Content="✕"
+                                                    Width="18" Height="18"
+                                                    Padding="0"
+                                                    FontSize="9"
+                                                    Foreground="#64748B"
+                                                    Background="Transparent"
+                                                    BorderThickness="0"
+                                                    Cursor="Hand"
+                                                    ToolTip="Удалить этот чат"
+                                                    Tag="{Binding}"
+                                                    Click="OnDeleteChatSessionClick"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- Bottom: Settings & Audit Report -->
+                    <Border Grid.Row="2" Background="#0A0C12" BorderBrush="#1A202C" BorderThickness="0,1,0,0" Padding="10,8">
+                        <StackPanel Orientation="Vertical">
+                            <Button x:Name="SettingsGearBtn"
+                                    Content="⚙  Настройки и модели"
+                                    Style="{StaticResource DarkButton}"
+                                    Padding="8,6"
+                                    FontSize="11.5"
+                                    Margin="0,0,0,4"
+                                    HorizontalAlignment="Stretch"
+                                    Click="OnOpenSettingsClick"/>
+                            <Button Content="📄  Аудиторский отчёт"
+                                    Style="{StaticResource GhostPillButton}"
+                                    Padding="8,6"
+                                    FontSize="11.5"
+                                    HorizontalAlignment="Stretch"
+                                    Click="OnExportReportClick"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- MAIN CHAT CANVAS + FLOATING COMPOSER -->
+            <Grid Grid.Column="1" Background="#0B0D12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Floating Sidebar Expand Button (visible when sidebar is collapsed) -->
+                <Button x:Name="SidebarExpandBtn"
+                        Content="▶"
+                        Visibility="Collapsed"
+                        Style="{StaticResource GhostPillButton}"
+                        Width="26" Height="26"
+                        Padding="0"
+                        Margin="10,10,0,0"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Top"
+                        Panel.ZIndex="10"
+                        ToolTip="Развернуть панель чатов"
+                        Click="OnToggleSidebarClick"/>
 
             <!-- Chat Scroll Area -->
             <ScrollViewer x:Name="ChatScroll"
@@ -561,15 +731,25 @@
                             <!-- Send / Kill-Switch Button -->
                             <Grid Grid.Column="7">
                                 <Button x:Name="RunButton"
-                                        Content="↑"
-                                        FontSize="15"
-                                        FontWeight="Bold"
-                                        Width="32"
-                                        Height="32"
+                                        Width="34"
+                                        Height="34"
                                         Padding="0"
                                         Style="{StaticResource PrimaryButton}"
                                         ToolTip="Отправить задачу (Enter)"
-                                        Click="OnRunClick"/>
+                                        Click="OnRunClick">
+                                    <Path Data="M 12,4 L 12,20 M 5,11 L 12,4 L 19,11"
+                                          Stroke="#FFFFFF"
+                                          StrokeThickness="2.2"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          Width="14"
+                                          Height="14"
+                                          Stretch="Uniform"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          SnapsToDevicePixels="True"/>
+                                </Button>
 
                                 <Button x:Name="StopButton"
                                         Content="⛔ Стоп"
@@ -758,15 +938,18 @@
                     </ScrollViewer>
                 </Border>
             </Grid>
+            </Grid>
         </Grid>
 
         <!-- SETTINGS MODAL OVERLAY (replaces left sidebar cleanly, inherits WDA_EXCLUDEFROMCAPTURE!) -->
         <Grid x:Name="SettingsOverlay"
               Grid.RowSpan="2"
               Background="#B807090E"
+              Opacity="0"
               Visibility="Collapsed"
               MouseDown="OnSettingsBackdropMouseDown">
-            <Border Background="#14171F"
+            <Border x:Name="SettingsModalCard"
+                    Background="#14171F"
                     BorderBrush="#29303F"
                     BorderThickness="1"
                     CornerRadius="16"
@@ -777,6 +960,9 @@
                     VerticalAlignment="Center"
                     HorizontalAlignment="Center"
                     MouseDown="OnSettingsModalContentMouseDown">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="SettingsModalTranslate" Y="24"/>
+                </Border.RenderTransform>
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="32" ShadowDepth="8" Opacity="0.65" Color="#000000"/>
                 </Border.Effect>
@@ -849,49 +1035,104 @@
                                             <Button x:Name="ProviderAnthropicBtn" Content="Anthropic (Claude)" Tag="Anthropic" Style="{StaticResource DarkButton}" Margin="6,0,0,0" Padding="8,7" Click="OnSelectProviderClick"/>
                                         </UniformGrid>
 
-                                        <!-- Step 2: Model Version -->
-                                        <TextBlock Text="2. Версия нейросети" FontSize="11.5" Foreground="#8B94A6" Margin="0,0,0,6"/>
-                                        <Grid Margin="0,0,0,4">
+                                        <!-- Step 2: API Key Input First! -->
+                                        <TextBlock Text="2. API-ключ (хранится зашифрованным в RAM/DPAPI)" FontSize="11.5" Foreground="#8B94A6" Margin="0,2,0,6"/>
+                                        <Grid Margin="0,0,0,10">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <ComboBox x:Name="SettingsVersionCombo"
-                                                      Padding="10,7"
-                                                      SelectionChanged="OnSettingsVersionChanged"/>
+                                            <PasswordBox x:Name="SettingsApiKeyBox" ToolTip="API-ключ никогда не сохраняется в открытом виде и не попадает в логи"/>
                                             <Button x:Name="LoadModelsFromKeyBtn"
                                                     Grid.Column="1"
-                                                    Content="🔄 По ключу"
-                                                    Style="{StaticResource DarkButton}"
-                                                    Padding="11,7"
+                                                    Content="⚡ Определить доступные модели"
+                                                    Style="{StaticResource PrimaryButton}"
+                                                    Padding="12,7"
                                                     Margin="8,0,0,0"
                                                     FontSize="12"
-                                                    ToolTip="Загрузить точный список моделей от провайдера по введённому ниже API-ключу"
+                                                    ToolTip="Автоматически опросить провайдера по ключу и отобразить доступные нейросети"
                                                     Click="OnLoadModelsFromKeyClick"/>
                                         </Grid>
-                                        <TextBlock x:Name="SelectedModelNoteText"
-                                                   Text=""
-                                                   FontSize="11"
-                                                   Foreground="#7D889E"
-                                                   Margin="2,0,0,8"
-                                                   TextWrapping="Wrap"/>
 
-                                        <Grid x:Name="CustomVersionPanel" Visibility="Collapsed" Margin="0,0,0,10">
-                                            <TextBox x:Name="SettingsCustomVersionBox"
-                                                     TextChanged="OnCustomVersionTextChanged"
-                                                     ToolTip="Введите точный ID модели (например gemini-2.5-flash, gpt-5.4, claude-opus-4-6)"/>
-                                            <TextBlock x:Name="CustomVersionHint"
-                                                       Text="Точный ID модели (например: gemini-2.5-flash)"
-                                                       FontSize="11.5"
-                                                       Foreground="#647084"
-                                                       Margin="10,0,0,0"
-                                                       VerticalAlignment="Center"
-                                                       IsHitTestVisible="False"/>
-                                        </Grid>
+                                        <!-- Step 3: Detected Available Neural Networks -->
+                                        <StackPanel x:Name="DetectedModelsSection" Margin="0,0,0,10">
+                                            <Grid Margin="0,0,0,6">
+                                                <TextBlock Text="3. Доступные нейросети по вашему ключу" FontSize="11.5" FontWeight="SemiBold" Foreground="#ECEEF2" VerticalAlignment="Center"/>
+                                                <Button x:Name="ToggleManualVersionBtn"
+                                                        Content="✏ Выбрать из каталога / вручную"
+                                                        Style="{StaticResource GhostPillButton}"
+                                                        Padding="6,2"
+                                                        FontSize="10.5"
+                                                        HorizontalAlignment="Right"
+                                                        Click="OnToggleManualVersionClick"/>
+                                            </Grid>
 
-                                        <!-- Step 3: API Key -->
-                                        <TextBlock Text="3. API-ключ (хранится только в зашифрованном виде)" FontSize="11.5" Foreground="#8B94A6" Margin="0,2,0,6"/>
-                                        <PasswordBox x:Name="SettingsApiKeyBox" Margin="0,0,0,12" ToolTip="API-ключ никогда не сохраняется в открытом виде и не попадает в логи"/>
+                                            <!-- Detected Models Cards List -->
+                                            <ItemsControl x:Name="DetectedModelsList" Margin="0,0,0,6">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Background="{Binding CardBackground}"
+                                                                BorderBrush="{Binding CardBorder}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="9"
+                                                                Padding="12,9"
+                                                                Margin="0,0,0,6">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <StackPanel Grid.Column="0">
+                                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="12.5" Foreground="{Binding TitleBrush}" Margin="0,0,8,0"/>
+                                                                        <Border Background="{Binding BadgeBackground}" CornerRadius="6" Padding="6,1.5" Margin="0,0,6,0">
+                                                                            <TextBlock Text="{Binding BadgeText}" FontSize="10" Foreground="{Binding BadgeForeground}" FontWeight="Medium"/>
+                                                                        </Border>
+                                                                        <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{Binding StatusBrush}" VerticalAlignment="Center"/>
+                                                                    </StackPanel>
+                                                                    <TextBlock Text="{Binding Description}" FontSize="11" Foreground="#8B94A6" TextWrapping="Wrap"/>
+                                                                </StackPanel>
+                                                                <Button Grid.Column="1"
+                                                                        Content="{Binding ActionBtnText}"
+                                                                        Style="{StaticResource PrimaryButton}"
+                                                                        Padding="12,6"
+                                                                        FontSize="11.5"
+                                                                        Tag="{Binding}"
+                                                                        Click="OnSelectDetectedModelClick"/>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <!-- Fallback Manual Selection (collapsed by default) -->
+                                            <StackPanel x:Name="ManualVersionSelectionPanel" Visibility="Collapsed" Margin="0,2,0,6">
+                                                <TextBlock Text="Выбор из стандартного каталога или ручной ввод ID:" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4"/>
+                                                <Grid Margin="0,0,0,4">
+                                                    <ComboBox x:Name="SettingsVersionCombo"
+                                                              Padding="10,7"
+                                                              SelectionChanged="OnSettingsVersionChanged"/>
+                                                </Grid>
+                                                <TextBlock x:Name="SelectedModelNoteText"
+                                                           Text=""
+                                                           FontSize="11"
+                                                           Foreground="#7D889E"
+                                                           Margin="2,0,0,6"
+                                                           TextWrapping="Wrap"/>
+                                                <Grid x:Name="CustomVersionPanel" Visibility="Collapsed" Margin="0,0,0,6">
+                                                    <TextBox x:Name="SettingsCustomVersionBox"
+                                                             TextChanged="OnCustomVersionTextChanged"
+                                                             ToolTip="Введите точный ID модели (например gemini-2.5-flash)"/>
+                                                    <TextBlock x:Name="CustomVersionHint"
+                                                               Text="Точный ID модели (например: gemini-2.5-flash)"
+                                                               FontSize="11.5"
+                                                               Foreground="#647084"
+                                                               Margin="10,0,0,0"
+                                                               VerticalAlignment="Center"
+                                                               IsHitTestVisible="False"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </StackPanel>
 
                                         <!-- Step 4: Persistence / Master Passphrase & Add Button -->
                                         <CheckBox x:Name="SettingsPersistVaultCheck"
