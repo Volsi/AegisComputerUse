@@ -573,7 +573,14 @@ public partial class MainWindow : Window
         }
         catch (GeminiApiException ex) when (ex.StatusCode == 404)
         {
-            SettingsAddErrorText.Text = $"Модель «{modelId}» не найдена (HTTP 404). Нажмите «🔄 По ключу», чтобы загрузить актуальный список моделей.";
+            if (targetProvider == AiProviderKind.GoogleGemini && modelId.Contains("2.5-flash", StringComparison.OrdinalIgnoreCase))
+            {
+                SelectSettingsModelId("gemini-3.8-flash");
+                SettingsAddErrorText.Text = $"Модель «{modelId}» больше недоступна для новых ключей Google (HTTP 404). Выбор автоматически переключен на актуальную «gemini-3.8-flash». Нажмите «⚡ Проверить ключ»!";
+                SettingsAddErrorText.Visibility = Visibility.Visible;
+                return;
+            }
+            SettingsAddErrorText.Text = $"Модель «{modelId}» не найдена (HTTP 404). Нажмите «⚡ Определить доступные модели», чтобы загрузить актуальный список моделей.";
             SettingsAddErrorText.Visibility = Visibility.Visible;
         }
         catch (Exception ex)
@@ -2246,6 +2253,54 @@ public partial class MainWindow : Window
         SaveAppSettings();
     }
 
+    private void OnPresetProxyGatewayClick(object sender, RoutedEventArgs e)
+    {
+        SettingsProxyBox.Text = "http://127.0.0.1:8585";
+        SettingsAddSuccessText.Text = "✓ Подключен локальный шлюз Antigravity Gateway (http://127.0.0.1:8585). Все запросы к Gemini направляются через шлюз.";
+        SettingsAddSuccessText.Visibility = Visibility.Visible;
+    }
+
+    private static string? FindAntigravityGatewayExe()
+    {
+        string[] candidates = [
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tools", "Antigravity_Gateway.exe"),
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Antigravity_Gateway.exe"),
+            @"D:\AegisComputerUse\tools\Antigravity_Gateway.exe",
+            @"C:\Users\tamir\.gemini\antigravity\brain\cd3be12f-fa67-47c6-bfbc-99808398003b\.user_uploaded\media_1794857374283_f4cc4202.exe"
+        ];
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    private void OnLaunchGatewayClick(object sender, RoutedEventArgs e)
+    {
+        string? exePath = FindAntigravityGatewayExe();
+        if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
+        {
+            SettingsAddErrorText.Text = "Файл Antigravity_Gateway.exe не найден в директории tools. Поместите его в папку tools.";
+            SettingsAddErrorText.Visibility = Visibility.Visible;
+            return;
+        }
+
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = exePath,
+                UseShellExecute = true,
+                WorkingDirectory = Path.GetDirectoryName(exePath) ?? string.Empty
+            };
+            System.Diagnostics.Process.Start(psi);
+            SettingsProxyBox.Text = "http://127.0.0.1:8585";
+            SettingsAddSuccessText.Text = "✓ Antigravity Gateway успешно запущен! Установлен прокси http://127.0.0.1:8585.";
+            SettingsAddSuccessText.Visibility = Visibility.Visible;
+        }
+        catch (Exception ex)
+        {
+            SettingsAddErrorText.Text = $"Ошибка запуска Antigravity Gateway: {LogRedactor.Redact(ex.Message)}";
+            SettingsAddErrorText.Visibility = Visibility.Visible;
+        }
+    }
+
     private void OnPresetProxyHappClick(object sender, RoutedEventArgs e)
     {
         SettingsProxyBox.Text = "http://127.0.0.1:10809";
@@ -2272,12 +2327,15 @@ public partial class MainWindow : Window
         if (!string.IsNullOrWhiteSpace(detected))
         {
             SettingsProxyBox.Text = detected;
-            SettingsAddSuccessText.Text = $"✓ Обнаружен активный локальный прокси ({detected})! Прокси успешно подключен.";
+            string label = detected.Contains("8585") ? "Antigravity Gateway (8585)" :
+                           detected.Contains("10809") ? "Happ / v2ray (10809)" :
+                           detected.Contains("7890") ? "Clash (7890)" : detected;
+            SettingsAddSuccessText.Text = $"✓ Обнаружен активный локальный прокси: {label}! Прокси успешно подключен.";
             SettingsAddSuccessText.Visibility = Visibility.Visible;
         }
         else
         {
-            SettingsAddErrorText.Text = "Локальный прокси на портах 10809 (Happ), 10808 (SOCKS5), 7890 (Clash), 20809 не обнаружен. Убедитесь, что Happ запущен, или используйте режим «Системный» / ссылку.";
+            SettingsAddErrorText.Text = "Локальный прокси на портах 8585 (Gateway), 10809 (Happ), 10808 (SOCKS5), 7890 (Clash) не обнаружен. Убедитесь, что шлюз или VPN запущен.";
             SettingsAddErrorText.Visibility = Visibility.Visible;
         }
     }
@@ -2525,10 +2583,61 @@ public partial class MainWindow : Window
         catch (GeminiApiException ex) when (ex.StatusCode == 404)
         {
             RollbackFailedHistory();
+            if (modelToRun.Provider == AiProviderKind.GoogleGemini &&
+                modelToRun.ModelId.Contains("2.5-flash", StringComparison.OrdinalIgnoreCase) &&
+                _runCts is { IsCancellationRequested: false })
+            {
+                // Auto-upgrade from deprecated gemini-2.5-flash to gemini-3.8-flash (or gemini-2.0-flash)
+                string upgradeModelId = "gemini-3.8-flash";
+                string upgradeDisplayName = "Gemini 3.8 Flash";
+                var upgradedEntry = EnsureOrActivateModelFromExistingGoogleKey(modelToRun, upgradeModelId, upgradeDisplayName);
+                var upgradedOptions = options with { Model = upgradeModelId };
+
+                AddStatusCard(
+                    "АВТО-ОБНОВЛЕНИЕ МОДЕЛИ (404)",
+                    $"Google сообщил: модель «gemini-2.5-flash» больше недоступна для новых пользователей. Автоматически переключаю на актуальную «{upgradeDisplayName}» и повторяю запрос...",
+                    "#38BDF8", "#0F1B29", "#1E3A5F", "🔄");
+
+                AgentRunningLabel.Text = $"{upgradeDisplayName}...";
+                try
+                {
+                    await _agentRunAsync(agent, upgradedEntry.Secret, prompt, attachmentsSnapshot, upgradedOptions, _runCts.Token);
+                    _lastFailedPrompt = null;
+                    return;
+                }
+                catch (OperationCanceledException)
+                {
+                    RollbackFailedHistory();
+                    _lastFailedPrompt = new FailedPromptRetryData(prompt, attachmentsSnapshot, userThumbs);
+                    AddStatusCard("ОСТАНОВЛЕНО", "Выполнение прервано.", "#F59E0B", "#21190C", "#78350F", "⏹", BuildErrorActionBar(modelToRun, null));
+                    return;
+                }
+                catch (GeminiApiException upgradeEx) when (upgradeEx.StatusCode is 500 or 502 or 503 or 504 or 529)
+                {
+                    // If gemini-3.8-flash was hit by 503 during upgrade, fallback to gemini-2.0-flash
+                    var fallback20Options = options with { Model = "gemini-2.0-flash" };
+                    AddStatusCard("АВТО-РЕЗЕРВ (HTTP 503)", "Модель gemini-3.8-flash перегружена. Выполняю через стабильную gemini-2.0-flash...", "#38BDF8", "#0F1B29", "#1E3A5F", "🔄");
+                    try
+                    {
+                        await _agentRunAsync(agent, upgradedEntry.Secret, prompt, attachmentsSnapshot, fallback20Options, _runCts.Token);
+                        _lastFailedPrompt = null;
+                        return;
+                    }
+                    catch
+                    {
+                        // Fall through
+                    }
+                }
+                catch
+                {
+                    // Fall through
+                }
+            }
+
             _lastFailedPrompt = new FailedPromptRetryData(prompt, attachmentsSnapshot, userThumbs);
             AddStatusCard(
                 "МОДЕЛЬ НЕ НАЙДЕНА (404)",
-                $"{LogRedactor.Redact(ex.Message)}\n\n💡 Модель «{modelToRun.ModelId}» недоступна для вашего ключа или API v1beta.\nОткройте «⚙ Настройки» → выберите провайдера → вставьте API-ключ → нажмите «🔄 По ключу», чтобы загрузить актуальный список доступных моделей.",
+                $"{LogRedactor.Redact(ex.Message)}\n\n💡 Модель «{modelToRun.ModelId}» недоступна для вашего ключа или API v1beta.\nОткройте «⚙ Настройки» → выберите провайдера → вставьте API-ключ → нажмите «⚡ Определить доступные модели», чтобы загрузить актуальный список разрешенных моделей.",
                 "#EF4444", "#261215", "#7F1D1D", "⛔",
                 BuildErrorActionBar(modelToRun, ex));
         }
@@ -2619,6 +2728,23 @@ public partial class MainWindow : Window
                         FormatRateLimitMessage(backupModelId, backupEx),
                         "#F59E0B", "#21190C", "#78350F", "⏳",
                         BuildErrorActionBar(modelToRun, backupEx));
+                }
+                catch (GeminiApiException backupEx) when (backupEx.StatusCode == 404 && backupModelId.Contains("2.5-flash", StringComparison.OrdinalIgnoreCase))
+                {
+                    // If gemini-2.5-flash failed with 404 as backup, fallback to gemini-2.0-flash!
+                    var fallback20Options = backupOptions with { Model = "gemini-2.0-flash" };
+                    AddStatusCard("АВТО-РЕЗЕРВ (HTTP 404)", "Модель gemini-2.5-flash устарела для вашего ключа. Выполняю через gemini-2.0-flash...", "#38BDF8", "#0F1B29", "#1E3A5F", "🔄");
+                    try
+                    {
+                        await _agentRunAsync(backupAgent, backupSecret, prompt, attachmentsSnapshot, fallback20Options, _runCts.Token);
+                        _lastFailedPrompt = null;
+                    }
+                    catch (Exception ex3)
+                    {
+                        RollbackFailedHistory();
+                        _lastFailedPrompt = new FailedPromptRetryData(prompt, attachmentsSnapshot, userThumbs);
+                        AddStatusCard("ОШИБКА", LogRedactor.Redact(ex3.Message), "#EF4444", "#261215", "#7F1D1D", "⛔", BuildErrorActionBar(modelToRun, null));
+                    }
                 }
                 catch (Exception backupEx)
                 {

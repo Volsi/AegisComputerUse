@@ -1235,14 +1235,16 @@
                                                        VerticalAlignment="Center"
                                                        IsHitTestVisible="False"/>
                                         </Grid>
-                                        <StackPanel Orientation="Horizontal">
-                                            <Button Content="Happ (10809)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,0" Click="OnPresetProxyHappClick" ToolTip="Happ / Sing-box / V2Ray HTTP прокси (порт 10809)"/>
-                                            <Button Content="Clash (7890)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,0" Click="OnPresetProxyClashClick" ToolTip="Clash / FlClash HTTP прокси (порт 7890)"/>
-                                            <Button Content="v2ray (10809)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,0" Click="OnPresetProxyV2RayClick"/>
-                                            <Button Content="⚡ Авто-поиск" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,0" Click="OnPresetProxyAutoDetectClick" ToolTip="Автоматически найти запущенный Happ, Clash, v2ray или системный VPN"/>
-                                            <Button Content="Системный" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,0" Click="OnPresetProxySystemClick"/>
-                                            <Button Content="Сбросить" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Click="OnPresetProxyClearClick"/>
-                                        </StackPanel>
+                                        <WrapPanel Margin="0,0,0,0">
+                                            <Button Content="Gateway (8585)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxyGatewayClick" ToolTip="Локальный шлюз Antigravity Gateway (порт 8585)"/>
+                                            <Button Content="Happ (10809)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxyHappClick" ToolTip="Happ / Sing-box / V2Ray HTTP прокси (порт 10809)"/>
+                                            <Button Content="Clash (7890)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxyClashClick" ToolTip="Clash / FlClash HTTP прокси (порт 7890)"/>
+                                            <Button Content="v2ray (10809)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxyV2RayClick"/>
+                                            <Button Content="⚡ Авто-поиск" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxyAutoDetectClick" ToolTip="Автоматически найти запущенный Gateway (8585), Happ, Clash, v2ray или системный VPN"/>
+                                            <Button Content="Системный" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxySystemClick"/>
+                                            <Button Content="Сбросить" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxyClearClick"/>
+                                            <Button Content="🚀 Запустить Gateway" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnLaunchGatewayClick" ToolTip="Запустить Antigravity Gateway в фоновом режиме"/>
+                                        </WrapPanel>
                                     </StackPanel>
                                 </Border>
 

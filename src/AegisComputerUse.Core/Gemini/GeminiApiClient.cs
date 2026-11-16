@@ -65,7 +65,7 @@ public sealed partial class GeminiApiClient : IDisposable
 
     public static async Task<string?> DetectActiveLocalProxyAsync(CancellationToken ct = default)
     {
-        int[] candidatePorts = [10809, 10808, 7890, 20809, 2080];
+        int[] candidatePorts = [8585, 8586, 10809, 10808, 7890, 20809, 2080];
         foreach (int port in candidatePorts)
         {
             try
