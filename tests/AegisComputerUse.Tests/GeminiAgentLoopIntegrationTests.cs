@@ -1630,6 +1630,57 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
     }
 
     [Fact]
+    public void GeminiApiClient_ParseProxyUri_HandlesHappPortsAndSchemes()
+    {
+        Assert.Null(GeminiApiClient.ParseProxyUri(null));
+        Assert.Null(GeminiApiClient.ParseProxyUri(""));
+        Assert.Null(GeminiApiClient.ParseProxyUri("system"));
+        Assert.Null(GeminiApiClient.ParseProxyUri("direct"));
+
+        // Happ / v2ray HTTP port
+        Uri? happHttp = GeminiApiClient.ParseProxyUri("127.0.0.1:10809");
+        Assert.NotNull(happHttp);
+        Assert.Equal("http", happHttp.Scheme);
+        Assert.Equal("127.0.0.1", happHttp.Host);
+        Assert.Equal(10809, happHttp.Port);
+
+        // Happ SOCKS5 port
+        Uri? happSocks = GeminiApiClient.ParseProxyUri("socks5://127.0.0.1:10808");
+        Assert.NotNull(happSocks);
+        Assert.Equal("socks5", happSocks.Scheme);
+        Assert.Equal(10808, happSocks.Port);
+
+        // Clash mixed port
+        Uri? clash = GeminiApiClient.ParseProxyUri("http://127.0.0.1:7890");
+        Assert.NotNull(clash);
+        Assert.Equal(7890, clash.Port);
+    }
+
+    [Fact]
+    public void MarkdownChatRenderer_BuildUserMessage_CreatesWrappingTextBlock()
+    {
+        Exception? staEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                UIElement elem = MarkdownChatRenderer.BuildUserMessage("Короткий промпт");
+                var tb = Assert.IsType<TextBlock>(elem);
+                Assert.Equal("Короткий промпт", tb.Text);
+                Assert.Equal(TextWrapping.Wrap, tb.TextWrapping);
+            }
+            catch (Exception ex)
+            {
+                staEx = ex;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        Assert.Null(staEx);
+    }
+
+    [Fact]
     public void MainWindow_FormatForbiddenMessage_DiagnosesLocationBlockAndApiDisabled()
     {
         var geoEx = new GeminiApiException(403, "User location is not supported for the API use.");

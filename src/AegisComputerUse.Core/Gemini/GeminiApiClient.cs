@@ -35,6 +35,60 @@ public sealed partial class GeminiApiClient : IDisposable
     public static string? GlobalProxyUrl { get; set; }
     internal TimeSpan TransientRetryDelay { get; set; } = TimeSpan.FromMilliseconds(900);
 
+    public static Uri? ParseProxyUri(string? rawProxy)
+    {
+        if (string.IsNullOrWhiteSpace(rawProxy)) return null;
+        string trimmed = rawProxy.Trim().Trim('"', '\'', '<', '>', '`');
+        if (string.Equals(trimmed, "system", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(trimmed, "direct", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(trimmed, "none", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (!trimmed.Contains("://", StringComparison.Ordinal))
+        {
+            trimmed = "http://" + trimmed;
+        }
+
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out Uri? parsed))
+        {
+            string scheme = parsed.Scheme.ToLowerInvariant();
+            if (scheme is "http" or "https" or "socks4" or "socks4a" or "socks5")
+            {
+                return parsed;
+            }
+        }
+
+        return null;
+    }
+
+    public static async Task<string?> DetectActiveLocalProxyAsync(CancellationToken ct = default)
+    {
+        int[] candidatePorts = [10809, 10808, 7890, 20809, 2080];
+        foreach (int port in candidatePorts)
+        {
+            try
+            {
+                using var tcp = new System.Net.Sockets.TcpClient();
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(200));
+                await tcp.ConnectAsync(IPAddress.Loopback, port, timeoutCts.Token).ConfigureAwait(false);
+                if (tcp.Connected)
+                {
+                    string scheme = port is 10808 ? "socks5" : "http";
+                    return $"{scheme}://127.0.0.1:{port}";
+                }
+            }
+            catch
+            {
+                // Port inactive or connection refused
+            }
+        }
+
+        return null;
+    }
+
     public static SocketsHttpHandler CreateSocketsHttpHandler(RemoteCertificateValidationCallback certValidator)
     {
         var handler = new SocketsHttpHandler
@@ -51,7 +105,8 @@ public sealed partial class GeminiApiClient : IDisposable
             }
         };
 
-        if (!string.IsNullOrWhiteSpace(GlobalProxyUrl) && Uri.TryCreate(GlobalProxyUrl, UriKind.Absolute, out Uri? proxyUri))
+        Uri? proxyUri = ParseProxyUri(GlobalProxyUrl);
+        if (proxyUri is not null)
         {
             handler.Proxy = new WebProxy(proxyUri);
             handler.UseProxy = true;
@@ -117,20 +172,39 @@ public sealed partial class GeminiApiClient : IDisposable
         var endpoint = new Uri($"https://{AllowedHost}/v1beta/models", UriKind.Absolute);
         ValidateEndpointUri(endpoint);
 
-        using HttpResponseMessage response = await apiKey.UseSecretAsync(async secretBytes =>
+        async Task<HttpResponseMessage> SendOnceAsync()
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, endpoint);
-            AddApiKeyHeader(req, secretBytes.Span);
-            return await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-        }).ConfigureAwait(false);
+            return await apiKey.UseSecretAsync(async secretBytes =>
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Get, endpoint);
+                AddApiKeyHeader(req, secretBytes.Span);
+                return await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            }).ConfigureAwait(false);
+        }
 
-        if ((int)response.StatusCode is >= 300 and < 400)
-            throw new HttpRequestException($"Blocked HTTP redirect ({(int)response.StatusCode}) from API endpoint.");
-
-        string responseBody = await ReadBoundedStringAsync(response.Content, MaxResponseBytes, ct).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
+        HttpResponseMessage? response = null;
+        const int maxListRetries = 2;
+        for (int attempt = 0; attempt <= maxListRetries; attempt++)
         {
-            throw new GeminiApiException((int)response.StatusCode, LogRedactor.Redact(responseBody));
+            response?.Dispose();
+            response = await SendOnceAsync().ConfigureAwait(false);
+            if ((int)response.StatusCode is 500 or 502 or 503 or 504 or 529 && attempt < maxListRetries)
+            {
+                await Task.Delay(TransientRetryDelay * (attempt + 1), ct).ConfigureAwait(false);
+                continue;
+            }
+            break;
+        }
+
+        using HttpResponseMessage finalResponse = response ?? throw new InvalidOperationException("No response received from models endpoint.");
+
+        if ((int)finalResponse.StatusCode is >= 300 and < 400)
+            throw new HttpRequestException($"Blocked HTTP redirect ({(int)finalResponse.StatusCode}) from API endpoint.");
+
+        string responseBody = await ReadBoundedStringAsync(finalResponse.Content, MaxResponseBytes, ct).ConfigureAwait(false);
+        if (!finalResponse.IsSuccessStatusCode)
+        {
+            throw new GeminiApiException((int)finalResponse.StatusCode, LogRedactor.Redact(responseBody));
         }
 
         using var doc = JsonDocument.Parse(responseBody, SafeJsonDocOptions);
@@ -228,8 +302,19 @@ public sealed partial class GeminiApiClient : IDisposable
             }
         };
 
-        await GenerateContentAsync(apiKey, safeModel, payload, ct).ConfigureAwait(false);
-        return Math.Max(1, sw.ElapsedMilliseconds);
+        const int maxRetries = 2;
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await GenerateContentAsync(apiKey, safeModel, payload, ct).ConfigureAwait(false);
+                return Math.Max(1, sw.ElapsedMilliseconds);
+            }
+            catch (GeminiApiException ex) when (ex.StatusCode is 500 or 502 or 503 or 504 or 529 && attempt < maxRetries)
+            {
+                await Task.Delay(TransientRetryDelay * (attempt + 1), ct).ConfigureAwait(false);
+            }
+        }
     }
 
     public async Task<string> TranscribeAudioAsync(

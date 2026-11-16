@@ -56,6 +56,21 @@ public static partial class MarkdownChatRenderer
     [GeneratedRegex(@"(//[^\n]*|#[^\n]*|""(?:\\.|[^""\\])*""|'(?:\\.|[^'\\])*'|\b\d+(?:\.\d+)?\b|\b[A-Za-z_][A-Za-z0-9_]*\b)", RegexOptions.CultureInvariant)]
     private static partial Regex CodeTokenRegex();
 
+    public static UIElement BuildUserMessage(string promptText)
+    {
+        string text = promptText ?? string.Empty;
+        var tb = new TextBlock
+        {
+            Text = text,
+            TextWrapping = TextWrapping.Wrap,
+            FontFamily = ProseFont,
+            FontSize = 13.5,
+            Foreground = PrimaryTextBrush,
+            LineHeight = 20.5
+        };
+        return tb;
+    }
+
     public static UIElement BuildRichMessage(string markdown)
     {
         string text = (markdown ?? string.Empty).Replace("\r\n", "\n");
@@ -422,6 +437,9 @@ public static partial class MarkdownChatRenderer
 
     private static RichTextBox CreateSelectableReadOnlyRichTextBox(FlowDocument doc, bool horizontalScroll)
     {
+        doc.PagePadding = new Thickness(0);
+        doc.ColumnWidth = double.PositiveInfinity;
+
         var rtb = new RichTextBox(doc)
         {
             IsReadOnly = true,

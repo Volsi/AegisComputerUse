@@ -489,7 +489,36 @@
                                             BorderThickness="{Binding CardBorderThickness}"
                                             CornerRadius="{Binding CardCornerRadius}"
                                             Padding="{Binding CardPadding}"
-                                            Margin="{Binding CardMargin}">
+                                            Margin="{Binding CardMargin}"
+                                            HorizontalAlignment="{Binding CardHorizontalAlignment}"
+                                            MaxWidth="{Binding CardMaxWidth}"
+                                            RenderTransformOrigin="0.5,0.5">
+                                        <Border.RenderTransform>
+                                            <TranslateTransform x:Name="MsgTranslate" Y="0"/>
+                                        </Border.RenderTransform>
+                                        <Border.Triggers>
+                                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                         From="0.0" To="1.0"
+                                                                         Duration="0:0:0.22">
+                                                            <DoubleAnimation.EasingFunction>
+                                                                <CubicEase EasingMode="EaseOut"/>
+                                                            </DoubleAnimation.EasingFunction>
+                                                        </DoubleAnimation>
+                                                        <DoubleAnimation Storyboard.TargetName="MsgTranslate"
+                                                                         Storyboard.TargetProperty="Y"
+                                                                         From="16" To="0"
+                                                                         Duration="0:0:0.22">
+                                                            <DoubleAnimation.EasingFunction>
+                                                                <CubicEase EasingMode="EaseOut"/>
+                                                            </DoubleAnimation.EasingFunction>
+                                                        </DoubleAnimation>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </EventTrigger>
+                                        </Border.Triggers>
                                         <StackPanel>
                                             <Grid Margin="0,0,0,5" Visibility="{Binding HeaderVisibility}">
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -1058,13 +1087,22 @@
                                         <StackPanel x:Name="DetectedModelsSection" Margin="0,0,0,10">
                                             <Grid Margin="0,0,0,6">
                                                 <TextBlock Text="3. Доступные нейросети по вашему ключу" FontSize="11.5" FontWeight="SemiBold" Foreground="#ECEEF2" VerticalAlignment="Center"/>
-                                                <Button x:Name="ToggleManualVersionBtn"
-                                                        Content="✏ Выбрать из каталога / вручную"
-                                                        Style="{StaticResource GhostPillButton}"
-                                                        Padding="6,2"
-                                                        FontSize="10.5"
-                                                        HorizontalAlignment="Right"
-                                                        Click="OnToggleManualVersionClick"/>
+                                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                                    <Button x:Name="ToggleCollapseDetectedModelsBtn"
+                                                            Content="▲ Свернуть"
+                                                            Style="{StaticResource GhostPillButton}"
+                                                            Padding="6,2"
+                                                            FontSize="10.5"
+                                                            Margin="0,0,6,0"
+                                                            Click="OnToggleCollapseDetectedModelsClick"
+                                                            ToolTip="Свернуть или развернуть список обнаруженных нейросетей"/>
+                                                    <Button x:Name="ToggleManualVersionBtn"
+                                                            Content="✏ Выбрать из каталога / вручную"
+                                                            Style="{StaticResource GhostPillButton}"
+                                                            Padding="6,2"
+                                                            FontSize="10.5"
+                                                            Click="OnToggleManualVersionClick"/>
+                                                </StackPanel>
                                             </Grid>
 
                                             <!-- Detected Models Cards List -->
@@ -1190,7 +1228,7 @@
                                                      FontSize="11.5"
                                                      TextChanged="OnProxyTextChanged"/>
                                             <TextBlock x:Name="SettingsProxyHint"
-                                                       Text="Например: http://127.0.0.1:7890 или socks5://127.0.0.1:10808 (пусто = системный)"
+                                                       Text="Например: http://127.0.0.1:10809 (Happ) или http://127.0.0.1:7890 (Clash), либо ссылка (пусто = системный)"
                                                        FontSize="11"
                                                        Foreground="#647084"
                                                        Margin="8,0,0,0"
@@ -1198,8 +1236,10 @@
                                                        IsHitTestVisible="False"/>
                                         </Grid>
                                         <StackPanel Orientation="Horizontal">
-                                            <Button Content="Clash (7890)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,0" Click="OnPresetProxyClashClick"/>
+                                            <Button Content="Happ (10809)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,0" Click="OnPresetProxyHappClick" ToolTip="Happ / Sing-box / V2Ray HTTP прокси (порт 10809)"/>
+                                            <Button Content="Clash (7890)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,0" Click="OnPresetProxyClashClick" ToolTip="Clash / FlClash HTTP прокси (порт 7890)"/>
                                             <Button Content="v2ray (10809)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,0" Click="OnPresetProxyV2RayClick"/>
+                                            <Button Content="⚡ Авто-поиск" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,0" Click="OnPresetProxyAutoDetectClick" ToolTip="Автоматически найти запущенный Happ, Clash, v2ray или системный VPN"/>
                                             <Button Content="Системный" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,0" Click="OnPresetProxySystemClick"/>
                                             <Button Content="Сбросить" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Click="OnPresetProxyClearClick"/>
                                         </StackPanel>

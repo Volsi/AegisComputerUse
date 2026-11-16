@@ -664,6 +664,7 @@ public partial class MainWindow : Window
 
             SettingsAddSuccessText.Text = $"✓ Найдено {discovered.Count} доступных нейросетей по вашему ключу! Нажмите «⚡ Подключить» на любой карточке.";
             SettingsAddSuccessText.Visibility = Visibility.Visible;
+            UpdateDetectedModelsCollapseButton();
         }
         catch (GeminiApiException ex) when (ex.StatusCode is 401 or 403)
         {
@@ -934,6 +935,31 @@ public partial class MainWindow : Window
         {
             SettingsAddErrorText.Text = LogRedactor.Redact(ex.Message);
             SettingsAddErrorText.Visibility = Visibility.Visible;
+        }
+    }
+
+    private bool _isDetectedModelsCollapsed;
+
+    private void OnToggleCollapseDetectedModelsClick(object sender, RoutedEventArgs e)
+    {
+        _isDetectedModelsCollapsed = !_isDetectedModelsCollapsed;
+        DetectedModelsList.Visibility = _isDetectedModelsCollapsed ? Visibility.Collapsed : Visibility.Visible;
+        UpdateDetectedModelsCollapseButton();
+    }
+
+    private void UpdateDetectedModelsCollapseButton()
+    {
+        if (ToggleCollapseDetectedModelsBtn is null) return;
+
+        if (_isDetectedModelsCollapsed)
+        {
+            ToggleCollapseDetectedModelsBtn.Content = _detectedModels.Count > 0
+                ? $"▼ Развернуть ({_detectedModels.Count})"
+                : "▼ Развернуть";
+        }
+        else
+        {
+            ToggleCollapseDetectedModelsBtn.Content = "▲ Свернуть";
         }
     }
 
@@ -2220,6 +2246,13 @@ public partial class MainWindow : Window
         SaveAppSettings();
     }
 
+    private void OnPresetProxyHappClick(object sender, RoutedEventArgs e)
+    {
+        SettingsProxyBox.Text = "http://127.0.0.1:10809";
+        SettingsAddSuccessText.Text = "✓ Установлен порт Happ (http://127.0.0.1:10809). Если Happ использует SOCKS5, укажите socks5://127.0.0.1:10808.";
+        SettingsAddSuccessText.Visibility = Visibility.Visible;
+    }
+
     private void OnPresetProxyClashClick(object sender, RoutedEventArgs e)
     {
         SettingsProxyBox.Text = "http://127.0.0.1:7890";
@@ -2228,6 +2261,25 @@ public partial class MainWindow : Window
     private void OnPresetProxyV2RayClick(object sender, RoutedEventArgs e)
     {
         SettingsProxyBox.Text = "http://127.0.0.1:10809";
+    }
+
+    private async void OnPresetProxyAutoDetectClick(object sender, RoutedEventArgs e)
+    {
+        SettingsAddErrorText.Visibility = Visibility.Collapsed;
+        SettingsAddSuccessText.Visibility = Visibility.Collapsed;
+
+        string? detected = await GeminiApiClient.DetectActiveLocalProxyAsync();
+        if (!string.IsNullOrWhiteSpace(detected))
+        {
+            SettingsProxyBox.Text = detected;
+            SettingsAddSuccessText.Text = $"✓ Обнаружен активный локальный прокси ({detected})! Прокси успешно подключен.";
+            SettingsAddSuccessText.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            SettingsAddErrorText.Text = "Локальный прокси на портах 10809 (Happ), 10808 (SOCKS5), 7890 (Clash), 20809 не обнаружен. Убедитесь, что Happ запущен, или используйте режим «Системный» / ссылку.";
+            SettingsAddErrorText.Visibility = Visibility.Visible;
+        }
     }
 
     private void OnPresetProxySystemClick(object sender, RoutedEventArgs e)
@@ -2691,6 +2743,17 @@ public partial class MainWindow : Window
             return true;
         }
 
+        if (primary.Provider == AiProviderKind.GoogleGemini &&
+            !primary.Secret.IsDisposed &&
+            string.Equals(primary.ModelId, "gemini-2.5-flash", StringComparison.OrdinalIgnoreCase))
+        {
+            provider = AiProviderKind.GoogleGemini;
+            modelId = "gemini-2.0-flash";
+            displayName = "Gemini 2.0 Flash";
+            secret = primary.Secret;
+            return true;
+        }
+
         provider = default;
         modelId = string.Empty;
         displayName = string.Empty;
@@ -2892,7 +2955,8 @@ public partial class MainWindow : Window
 
     private void AddUserMessage(string promptText, List<ImageSource> thumbnails)
     {
-        UIElement visual = MarkdownChatRenderer.BuildRichMessage(promptText);
+        string text = string.IsNullOrWhiteSpace(promptText) ? $"[Прикреплено файлов: {thumbnails.Count}]" : promptText;
+        UIElement visual = MarkdownChatRenderer.BuildUserMessage(text);
         _chatEntries.Add(new ChatEntry(
             Header: "Вы",
             IconBadge: "👤",
@@ -2903,10 +2967,12 @@ public partial class MainWindow : Window
             CardBorderThickness: new Thickness(1),
             CardCornerRadius: new CornerRadius(14),
             CardPadding: new Thickness(14, 10, 14, 10),
-            CardMargin: new Thickness(64, 0, 0, 12),
+            CardMargin: new Thickness(64, 0, 0, 10),
             HeaderVisibility: Visibility.Visible,
             RichVisual: visual,
-            MessageImages: thumbnails));
+            MessageImages: thumbnails,
+            CardHorizontalAlignment: HorizontalAlignment.Right,
+            CardMaxWidth: 720));
         ChatScroll.ScrollToEnd();
     }
 
@@ -2924,10 +2990,12 @@ public partial class MainWindow : Window
             CardBorderThickness: new Thickness(0),
             CardCornerRadius: new CornerRadius(0),
             CardPadding: new Thickness(2, 4, 2, 8),
-            CardMargin: new Thickness(0, 2, 0, 12),
+            CardMargin: new Thickness(0, 2, 48, 12),
             HeaderVisibility: Visibility.Visible,
             RichVisual: visual,
-            MessageImages: []));
+            MessageImages: [],
+            CardHorizontalAlignment: HorizontalAlignment.Left,
+            CardMaxWidth: 860));
         ChatScroll.ScrollToEnd();
     }
 
@@ -3168,7 +3236,9 @@ public partial class MainWindow : Window
         Thickness CardMargin,
         Visibility HeaderVisibility,
         UIElement RichVisual,
-        List<ImageSource> MessageImages)
+        List<ImageSource> MessageImages,
+        HorizontalAlignment CardHorizontalAlignment = HorizontalAlignment.Stretch,
+        double CardMaxWidth = double.PositiveInfinity)
     {
         public Visibility HasMessageImages => MessageImages.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
