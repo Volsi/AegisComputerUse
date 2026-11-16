@@ -24,6 +24,15 @@ public sealed record WindowTargetInfo(
     public override string ToString() => Title;
 }
 
+public sealed record MonitorTargetInfo(
+    int Index,
+    string Name,
+    Win32Interop.RECT Bounds,
+    bool IsPrimary)
+{
+    public override string ToString() => IsPrimary ? $"{Name} (Основной)" : Name;
+}
+
 public interface IScreenCaptureService
 {
     ScreenCaptureFrame CaptureDesktopOrWindow(Win32Interop.RECT? targetRect = null, int maxOutputWidth = 1280);
@@ -31,6 +40,35 @@ public interface IScreenCaptureService
 
 public sealed class ScreenCaptureService : IScreenCaptureService
 {
+    public static IReadOnlyList<MonitorTargetInfo> GetMonitors()
+    {
+        var list = new List<MonitorTargetInfo>();
+        int idx = 1;
+        Win32Interop.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr hMon, IntPtr _, ref Win32Interop.RECT _, IntPtr _) =>
+        {
+            var mi = new Win32Interop.MONITORINFOEX { cbSize = Marshal.SizeOf<Win32Interop.MONITORINFOEX>() };
+            if (Win32Interop.GetMonitorInfo(hMon, ref mi))
+            {
+                bool isPrimary = (mi.dwFlags & Win32Interop.MONITORINFOF_PRIMARY) != 0;
+                string device = mi.szDevice?.Trim() ?? string.Empty;
+                string name = string.IsNullOrWhiteSpace(device) ? $"Дисплей {idx}" : $"Дисплей {idx} ({device})";
+                list.Add(new MonitorTargetInfo(idx++, name, mi.rcMonitor, isPrimary));
+            }
+            return true;
+        }, IntPtr.Zero);
+
+        if (list.Count == 0)
+        {
+            int vx = Win32Interop.GetSystemMetrics(Win32Interop.SM_XVIRTUALSCREEN);
+            int vy = Win32Interop.GetSystemMetrics(Win32Interop.SM_YVIRTUALSCREEN);
+            int vw = Math.Max(1, Win32Interop.GetSystemMetrics(Win32Interop.SM_CXVIRTUALSCREEN));
+            int vh = Math.Max(1, Win32Interop.GetSystemMetrics(Win32Interop.SM_CYVIRTUALSCREEN));
+            list.Add(new MonitorTargetInfo(1, "Дисплей 1", new Win32Interop.RECT { Left = vx, Top = vy, Right = vx + vw, Bottom = vy + vh }, true));
+        }
+
+        return list;
+    }
+
     public static IReadOnlyList<WindowTargetInfo> GetVisibleWindows(IntPtr excludeHwnd)
     {
         var list = new List<WindowTargetInfo>();

@@ -167,6 +167,14 @@
                             Margin="0,0,5,0"
                             Click="OnClearChatClick"/>
 
+                    <Button Content="📄 Отчёт"
+                            Style="{StaticResource GhostPillButton}"
+                            FontSize="11.5"
+                            Padding="9,4"
+                            Margin="0,0,5,0"
+                            ToolTip="Экспорт аудиторского отчёта текущей сессии (Markdown / SafeFileSandbox)"
+                            Click="OnExportReportClick"/>
+
                     <!-- Dedicated Settings Gear Button -->
                     <Button x:Name="SettingsGearBtn"
                             Content="⚙ Настройки"

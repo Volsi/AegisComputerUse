@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
@@ -948,6 +949,24 @@ public partial class MainWindow : Window
             allSelected ? Visibility.Visible : Visibility.Collapsed));
 
         bool foundSelected = allSelected;
+
+        var monitors = ScreenCaptureService.GetMonitors();
+        if (monitors.Count > 1)
+        {
+            foreach (var mon in monitors)
+            {
+                IntPtr monHandle = (IntPtr)(-100 - mon.Index);
+                bool isMonSel = _selectedWindowHandle == monHandle;
+                if (isMonSel) foundSelected = true;
+                list.Add(new WindowScopeItem(
+                    monHandle,
+                    mon.Name,
+                    $"🖥 {mon}",
+                    isMonSel ? BrushFromHex("#212634") : Brushes.Transparent,
+                    isMonSel ? Visibility.Visible : Visibility.Collapsed));
+            }
+        }
+
         foreach (var win in ScreenCaptureService.GetVisibleWindows(_mainHwnd))
         {
             bool isSel = win.Handle == _selectedWindowHandle;
@@ -1414,6 +1433,72 @@ public partial class MainWindow : Window
         _sessionCumulativeTokens = 0;
         UpdateUsageUi();
         CloseAllPopups();
+    }
+
+    private void OnExportReportClick(object sender, RoutedEventArgs e) => ExportSessionReport();
+
+    internal string ExportSessionReport()
+    {
+        string reportsDir = Path.Combine(_sandboxRoot, "Reports");
+        Directory.CreateDirectory(reportsDir);
+
+        string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+        string reportFile = Path.Combine(reportsDir, $"Aegis_Session_Report_{timestamp}.md");
+
+        var sb = new StringBuilder();
+        sb.AppendLine("# Аудиторский отчёт сессии Aegis Computer Use");
+        sb.AppendLine();
+        sb.AppendLine($"- **Дата и время**: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine($"- **Активная модель**: {_activeModel?.DisplayName ?? "Не выбрана"} ({_activeModel?.ModelId ?? "нет"})");
+        sb.AppendLine($"- **Провайдер**: {_activeModel?.Provider.ToString() ?? "нет"}");
+        sb.AppendLine($"- **Область захвата**: {_selectedWindowTitle}");
+        sb.AppendLine($"- **Использовано токенов**: {_sessionCumulativeTokens:N0}");
+        sb.AppendLine($"- **Создано файлов в песочнице**: {_createdFiles.Count}");
+        sb.AppendLine();
+        sb.AppendLine("---");
+        sb.AppendLine();
+        sb.AppendLine("## Журнал диалога и действий");
+        sb.AppendLine();
+
+        if (_chatEntries.Count == 0)
+        {
+            sb.AppendLine("*В текущей сессии диалог пуст.*");
+        }
+        else
+        {
+            foreach (var entry in _chatEntries)
+            {
+                sb.AppendLine($"### [{entry.TimeText}] {entry.IconBadge} {entry.Header}");
+                sb.AppendLine();
+                if (entry.RichVisual is TextBlock tb && !string.IsNullOrWhiteSpace(tb.Text))
+                {
+                    sb.AppendLine(tb.Text);
+                    sb.AppendLine();
+                }
+            }
+        }
+
+        if (_createdFiles.Count > 0)
+        {
+            sb.AppendLine("---");
+            sb.AppendLine();
+            sb.AppendLine("## Созданные файлы в SafeFileSandbox");
+            sb.AppendLine();
+            foreach (var f in _createdFiles)
+            {
+                sb.AppendLine($"- **{f.DisplayLabel}** — `{f.FullPath}`");
+            }
+            sb.AppendLine();
+        }
+
+        File.WriteAllText(reportFile, sb.ToString(), Encoding.UTF8);
+
+        AddStatusCard(
+            "ОТЧЁТ ЭКСПОРТИРОВАН",
+            $"Аудиторский отчёт сессии успешно сохранён в файл:\n`{reportFile}`",
+            "#10B981", "#092218", "#064E3B", "📄");
+
+        return reportFile;
     }
 
     private void OnQuickPromptClick(object sender, RoutedEventArgs e)
@@ -1953,7 +2038,16 @@ public partial class MainWindow : Window
         int maxSteps = GetConfiguredMaxSteps();
 
         Win32Interop.RECT? targetRect = null;
-        if (_selectedWindowHandle != IntPtr.Zero &&
+        if (_selectedWindowHandle.ToInt64() < -100)
+        {
+            int monitorIndex = (int)(-_selectedWindowHandle.ToInt64() - 100);
+            var mon = ScreenCaptureService.GetMonitors().FirstOrDefault(m => m.Index == monitorIndex);
+            if (mon is not null)
+            {
+                targetRect = mon.Bounds;
+            }
+        }
+        else if (_selectedWindowHandle != IntPtr.Zero &&
             Win32Interop.IsWindow(_selectedWindowHandle) &&
             Win32Interop.GetWindowRect(_selectedWindowHandle, out var freshRect))
         {

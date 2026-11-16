@@ -358,6 +358,7 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
     }
 
 
+
     [Fact]
     public async Task ComputerUseAgent_OpenAiResponsesLoop_SendsBearerHeader_ExecutesTool_AndParsesUsageAndReasoning()
     {
@@ -647,6 +648,7 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
     }
 
 
+
     [Fact]
     public void AiProviderCatalog_UsesValidGemini25ComputerUseId_AndResolvesContextLimit()
     {
@@ -888,6 +890,7 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
 
         Assert.Null(staEx);
     }
+
 
 
     [Fact]
@@ -1213,6 +1216,7 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
     }
 
 
+
     [Fact]
     public async Task ComputerUseAgent_RetriesTransient503_AndFormatsLocalizedOverloadAfterExhaustion()
     {
@@ -1447,6 +1451,7 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
     }
 
 
+
     [Fact]
     public void MainWindow_OverloadCardActionButton_ClonesGoogleKeyToGemini25Flash_AndRetriesPrompt()
     {
@@ -1567,6 +1572,7 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
         Assert.Null(staEx);
     }
 
+
     [Fact]
     public void VoiceCaptureService_CalculateRms_DistinguishesSilenceFromSpeech_AndBuildsWavHeader()
     {
@@ -1684,6 +1690,67 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
                     Assert.Equal(2, handler.RecordedRequests.Count);
                     Assert.Equal("/v1beta/models/gemini-4-argon:generateContent", handler.RecordedRequests[0].Uri.AbsolutePath);
                     Assert.Equal("/v1beta/models/gemini-2.5-flash:generateContent", handler.RecordedRequests[1].Uri.AbsolutePath);
+                }
+                finally
+                {
+                    win.Close();
+                }
+            }
+            catch (Exception ex)
+            {
+                staEx = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (Directory.Exists(tempDir))
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+
+        Assert.Null(staEx);
+    }
+
+    [Fact]
+    public void ScreenCaptureService_GetMonitors_ReturnsAtLeastOneValidMonitor()
+    {
+        var monitors = ScreenCaptureService.GetMonitors();
+        Assert.NotEmpty(monitors);
+
+        var primary = monitors.FirstOrDefault(m => m.IsPrimary);
+        Assert.NotNull(primary);
+        Assert.True(primary.Bounds.Right > primary.Bounds.Left, "Monitor width must be positive");
+        Assert.True(primary.Bounds.Bottom > primary.Bounds.Top, "Monitor height must be positive");
+        Assert.False(string.IsNullOrWhiteSpace(primary.Name), "Monitor name must not be blank");
+    }
+
+    [Fact]
+    public void MainWindow_ExportSessionReport_GeneratesMarkdownFileInSandboxReports()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"AegisReportTest_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        Exception? staEx = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var handler = new RecordingHandler([]);
+                using var apiClient = new GeminiApiClient(handler);
+                var vault = new MultiModelVault(tempDir);
+
+                var win = new MainWindow(vault, apiClient);
+                try
+                {
+                    string reportPath = win.ExportSessionReport();
+                    Assert.True(File.Exists(reportPath), "Report file must exist on disk");
+
+                    string content = File.ReadAllText(reportPath);
+                    Assert.Contains("Аудиторский отчёт сессии Aegis Computer Use", content);
+                    Assert.Contains("Журнал диалога и действий", content);
                 }
                 finally
                 {
