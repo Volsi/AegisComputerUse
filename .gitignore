@@ -1,0 +1,40 @@
+## Visual Studio and .NET Build Artifacts
+[Bb]in/
+[Oo]bj/
+dist/
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]uild/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## User-specific files
+*.rsuser
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj.user
+
+## Crash and test dumps
+*.dmp
+*.dump
+*.crash
+TestResults/
+
+## Secrets and Local Configs
+*.vault
+*.key
+settings.json

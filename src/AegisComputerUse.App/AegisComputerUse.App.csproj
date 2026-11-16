@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\AegisComputerUse.Core\AegisComputerUse.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AegisComputerUse.Tests" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>AegisComputerUse</AssemblyName>
+    <ApplicationIcon>Assets\Aegis.ico</ApplicationIcon>
+    <Product>Aegis Computer Use</Product>
+    <Description>Protected AI Desktop Agent (Gemini / OpenAI / Anthropic)</Description>
+    <Version>1.0.0</Version>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\Aegis.ico" />
+  </ItemGroup>
+
+</Project>

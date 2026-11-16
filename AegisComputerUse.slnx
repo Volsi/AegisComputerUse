@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AegisComputerUse.App/AegisComputerUse.App.csproj" />
+    <Project Path="src/AegisComputerUse.Core/AegisComputerUse.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AegisComputerUse.Tests/AegisComputerUse.Tests.csproj" />
+  </Folder>
+</Solution>
