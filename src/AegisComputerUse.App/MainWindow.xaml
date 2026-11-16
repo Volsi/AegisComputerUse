@@ -146,6 +146,19 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Stream / Screenshot Visibility Quick Toggle -->
+                    <Button x:Name="StreamVisibilityBtn"
+                            Style="{StaticResource GhostPillButton}"
+                            Padding="8,3"
+                            Margin="0,0,6,0"
+                            ToolTip="Видимость окна в Discord, OBS и скриншотах (нажмите для переключения)"
+                            Click="OnToggleStreamVisibilityClick">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="StreamVisibilityIcon" Text="👁" FontSize="11" Margin="0,0,4,0"/>
+                            <TextBlock x:Name="StreamVisibilityText" Text="В стриме: Видимо" FontSize="10.5" Foreground="#38BDF8"/>
+                        </StackPanel>
+                    </Button>
+
                     <Border Background="#141822"
                             BorderBrush="#222938"
                             BorderThickness="1"
@@ -1021,8 +1034,8 @@
                                         <TextBlock Text="Защита экрана и действий Computer Use" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,12"/>
 
                                         <CheckBox x:Name="ExcludeCaptureCheck"
-                                                  Content="Скрывать окно Aegis от скриншотов и захвата экрана (WDA_EXCLUDEFROMCAPTURE)"
-                                                  IsChecked="True"
+                                                  Content="Скрывать окно Aegis от захвата экрана DWM (скрывает от Discord, OBS и скриншотов)"
+                                                  IsChecked="False"
                                                   Margin="0,0,0,10"
                                                   Checked="OnExcludeCaptureChanged"
                                                   Unchecked="OnExcludeCaptureChanged"/>

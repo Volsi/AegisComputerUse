@@ -283,13 +283,46 @@ public partial class MainWindow : Window
     private void ApplyCaptureExclusion()
     {
         if (_mainHwnd == IntPtr.Zero) return;
-        uint affinity = ExcludeCaptureCheck.IsChecked == true
+        bool isExcluded = ExcludeCaptureCheck.IsChecked == true;
+        uint affinity = isExcluded
             ? Win32Interop.WDA_EXCLUDEFROMCAPTURE
             : Win32Interop.WDA_NONE;
         Win32Interop.SetWindowDisplayAffinity(_mainHwnd, affinity);
+
+        if (StreamVisibilityBtn is not null)
+        {
+            StreamVisibilityIcon.Text = isExcluded ? "🛡" : "👁";
+            StreamVisibilityText.Text = isExcluded ? "В стриме: Скрыто" : "В стриме: Видимо";
+            StreamVisibilityText.Foreground = isExcluded ? BrushFromHex("#94A3B8") : BrushFromHex("#38BDF8");
+            StreamVisibilityBtn.ToolTip = isExcluded
+                ? "Окно Aegis скрыто от захвата DWM (не видно в Discord / OBS / скриншотах). Нажмите, чтобы сделать видимым."
+                : "Окно Aegis полностью видимо в Discord / OBS / скриншотах. Нажмите, чтобы скрыть.";
+        }
     }
 
-    private void OnExcludeCaptureChanged(object sender, RoutedEventArgs e) => ApplyCaptureExclusion();
+    private void OnExcludeCaptureChanged(object sender, RoutedEventArgs e)
+    {
+        ApplyCaptureExclusion();
+        SaveAppSettings();
+    }
+
+    private void OnToggleStreamVisibilityClick(object sender, RoutedEventArgs e)
+    {
+        ExcludeCaptureCheck.IsChecked = ExcludeCaptureCheck.IsChecked != true;
+        ApplyCaptureExclusion();
+        SaveAppSettings();
+
+        bool isExcluded = ExcludeCaptureCheck.IsChecked == true;
+        AddStatusCard(
+            isExcluded ? "ЗАЩИТА СТРИМА ВКЛЮЧЕНА" : "РЕЖИМ ТРАНСЛЯЦИИ ВКЛЮЧЕН",
+            isExcluded
+                ? "Окно Aegis скрыто от захвата экрана DWM (теперь не отображается в Discord, OBS и скриншотах)."
+                : "Окно Aegis теперь полностью видимо при демонстрации экрана в Discord, OBS и на скриншотах.",
+            isExcluded ? "#8B94A6" : "#38BDF8",
+            isExcluded ? "#14171F" : "#0F1B29",
+            isExcluded ? "#262C38" : "#1E3A5F",
+            isExcluded ? "🛡" : "👁");
+    }
 
     // ==================== Settings Modal & Add Model Workflow ====================
 
@@ -1962,6 +1995,12 @@ public partial class MainWindow : Window
             {
                 MaxStepsBox.Text = steps.ToString();
             }
+
+            if (node["excludeCapture"] is JsonNode excNode && excNode.GetValue<bool>() is bool exc)
+            {
+                ExcludeCaptureCheck.IsChecked = exc;
+                ApplyCaptureExclusion();
+            }
         }
         catch
         {
@@ -1986,6 +2025,7 @@ public partial class MainWindow : Window
                 ["autoSendVoice"] = AutoSendVoiceCheck?.IsChecked ?? true,
                 ["liveVoice"] = _isLiveVoiceActive,
                 ["realTimeScreen"] = RealTimeScreenWatchCheck?.IsChecked ?? true,
+                ["excludeCapture"] = ExcludeCaptureCheck?.IsChecked ?? false,
                 ["stepsPerPrompt"] = steps
             };
 

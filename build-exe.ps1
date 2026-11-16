@@ -15,7 +15,13 @@ if (-not $SkipTests) {
 }
 
 if (Test-Path $distDir) {
-    Remove-Item $distDir -Recurse -Force
+    try {
+        Remove-Item $distDir -Recurse -Force
+    } catch {
+        Write-Warning "Output directory or executable is currently in use by a running instance: $($_.Exception.Message)"
+        $distDir = Join-Path $root "dist\AegisComputerUse_Update"
+        if (Test-Path $distDir) { Remove-Item $distDir -Recurse -Force -ErrorAction SilentlyContinue }
+    }
 }
 
 $singleFile = if ($Unpacked) { "false" } else { "true" }
