@@ -65,7 +65,9 @@ public sealed partial class GeminiApiClient : IDisposable
 
     public static async Task<string?> DetectActiveLocalProxyAsync(CancellationToken ct = default)
     {
-        int[] candidatePorts = [8585, 8586, 10809, 10808, 7890, 20809, 2080];
+        // Prioritize true forward-proxy tunnel ports (Happ, Xray, Clash, Antigravity Bridge)
+        // Port 8585 is an HTTP relay endpoint, while 8586 and 10809/10808 provide transparent HTTPS tunneling.
+        int[] candidatePorts = [10809, 10808, 7890, 8586, 2081, 2080, 1080];
         foreach (int port in candidatePorts)
         {
             try
@@ -76,7 +78,7 @@ public sealed partial class GeminiApiClient : IDisposable
                 await tcp.ConnectAsync(IPAddress.Loopback, port, timeoutCts.Token).ConfigureAwait(false);
                 if (tcp.Connected)
                 {
-                    string scheme = port is 10808 ? "socks5" : "http";
+                    string scheme = port is 10808 or 2080 or 1080 ? "socks5" : "http";
                     return $"{scheme}://127.0.0.1:{port}";
                 }
             }

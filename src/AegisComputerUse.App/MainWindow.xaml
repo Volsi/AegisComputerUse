@@ -48,14 +48,22 @@
                 BorderBrush="#1E2430"
                 BorderThickness="0,0,0,1"
                 Padding="14,0,8,0">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+            <DockPanel LastChildFill="True">
+                <!-- Dedicated Window Caption Controls (ALWAYS PINNED TO FAR RIGHT, CAN NEVER OVERFLOW) -->
+                <StackPanel DockPanel.Dock="Right"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Border Width="1" Height="18" Background="#222836" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                    <Button x:Name="WinMinBtn" Content="─" Style="{StaticResource CaptionButton}" ToolTip="Свернуть" Click="OnMinimizeClick"/>
+                    <Button x:Name="WinMaxBtn" Style="{StaticResource CaptionButton}" ToolTip="Развернуть" Click="OnMaximizeRestoreClick">
+                        <TextBlock x:Name="MaximizeGlyph" Text="□" FontSize="12"/>
+                    </Button>
+                    <Button x:Name="WinCloseBtn" Content="✕" Style="{StaticResource CaptionCloseButton}" ToolTip="Закрыть" Click="OnCloseWindowClick"/>
+                </StackPanel>
 
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Left branding and navigation toggle -->
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- Sidebar Toggle Button -->
                     <Button x:Name="SidebarToggleBtn"
                             Content="☰"
@@ -124,14 +132,12 @@
                     </Border>
                 </StackPanel>
 
-                <!-- Middle Badges & Live Status (Auto-scroll / Clip if narrow) -->
-                <StackPanel Grid.Column="1"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Center"
-                            Margin="0,0,8,0"
-                            ClipToBounds="True"
-                            WindowChrome.IsHitTestVisibleInChrome="True">
+                <!-- Middle Badges & Live Status (Auto-fit remaining width, right-aligned, clipped safely) -->
+                <Grid ClipToBounds="True" WindowChrome.IsHitTestVisibleInChrome="True">
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Margin="0,0,10,0">
                     <!-- Vault / Model Key Status Pill (clickable -> Settings) -->
                     <Button x:Name="TopKeyStatusBtn"
                             Style="{StaticResource GhostPillButton}"
@@ -190,20 +196,9 @@
                                    Foreground="#7B859A"/>
                     </Border>
                 </StackPanel>
-
-                <!-- Dedicated Window Caption Controls (GUARANTEED PINNED TO FAR RIGHT) -->
-                <StackPanel Grid.Column="2"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Center"
-                            WindowChrome.IsHitTestVisibleInChrome="True">
-                    <Border Width="1" Height="18" Background="#222836" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                    <Button x:Name="WinMinBtn" Content="─" Style="{StaticResource CaptionButton}" ToolTip="Свернуть" Click="OnMinimizeClick"/>
-                    <Button x:Name="WinMaxBtn" Style="{StaticResource CaptionButton}" ToolTip="Развернуть" Click="OnMaximizeRestoreClick">
-                        <TextBlock x:Name="MaximizeGlyph" Text="□" FontSize="12"/>
-                    </Button>
-                    <Button x:Name="WinCloseBtn" Content="✕" Style="{StaticResource CaptionCloseButton}" ToolTip="Закрыть" Click="OnCloseWindowClick"/>
-                </StackPanel>
             </Grid>
+
+            </DockPanel>
         </Border>
 
         <!-- Work Area: Left Sidebar (Collapsible) + Main Chat Area -->
@@ -1236,11 +1231,11 @@
                                                        IsHitTestVisible="False"/>
                                         </Grid>
                                         <WrapPanel Margin="0,0,0,0">
-                                            <Button Content="Gateway (8585)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxyGatewayClick" ToolTip="Локальный шлюз Antigravity Gateway (порт 8585)"/>
                                             <Button Content="Happ (10809)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxyHappClick" ToolTip="Happ / Sing-box / V2Ray HTTP прокси (порт 10809)"/>
+                                            <Button Content="Happ SOCKS (10808)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxyHappSocksClick" ToolTip="Happ SOCKS5 прокси (порт 10808)"/>
+                                            <Button Content="Bridge (8586)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxyBridgeClick" ToolTip="Шлюз Antigravity ProxyBridge (порт 8586)"/>
                                             <Button Content="Clash (7890)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxyClashClick" ToolTip="Clash / FlClash HTTP прокси (порт 7890)"/>
-                                            <Button Content="v2ray (10809)" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxyV2RayClick"/>
-                                            <Button Content="⚡ Авто-поиск" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxyAutoDetectClick" ToolTip="Автоматически найти запущенный Gateway (8585), Happ, Clash, v2ray или системный VPN"/>
+                                            <Button Content="⚡ Авто-поиск" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxyAutoDetectClick" ToolTip="Автоматически найти запущенный Happ (10809/10808), Clash (7890), Bridge (8586) или VPN"/>
                                             <Button Content="Системный" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxySystemClick"/>
                                             <Button Content="Сбросить" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnPresetProxyClearClick"/>
                                             <Button Content="🚀 Запустить Gateway" Style="{StaticResource GhostPillButton}" FontSize="11" Padding="6,3" Margin="0,0,6,6" Click="OnLaunchGatewayClick" ToolTip="Запустить Antigravity Gateway в фоновом режиме"/>

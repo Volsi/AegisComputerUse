@@ -452,14 +452,15 @@ public sealed class ComputerUseAgent
         Action<AgentEvent> emitEvent,
         CancellationToken ct)
     {
-        const int maxRetries = 2;
+        const int maxRateLimitRetries = 2;
+        const int maxTransientRetries = 2;
         for (int attempt = 0; ; attempt++)
         {
             try
             {
                 return await operation().ConfigureAwait(false);
             }
-            catch (GeminiApiException ex) when (ex.StatusCode == 429 && attempt < maxRetries)
+            catch (GeminiApiException ex) when (ex.StatusCode == 429 && attempt < maxRateLimitRetries)
             {
                 GeminiRateLimitInfo info = ex.ParseRateLimitInfo();
                 if (info.IsZeroLimit || info.RetryDelay is null ||
@@ -474,12 +475,13 @@ public sealed class ComputerUseAgent
                     $"Временный лимит частоты запросов (HTTP 429): ждём {wait.TotalSeconds:0.#} сек и повторяем..."));
                 await Task.Delay(wait, ct).ConfigureAwait(false);
             }
-            catch (GeminiApiException ex) when (ex.StatusCode is 500 or 502 or 503 or 504 or 529 && attempt < maxRetries)
+            catch (GeminiApiException ex) when (ex.StatusCode is 500 or 502 or 503 or 504 or 529 && attempt < maxTransientRetries)
             {
-                double delayMs = Math.Max(1, TransientServerRetryBaseDelay.TotalMilliseconds * (1 << attempt));
+                double baseMs = Math.Max(1000, TransientServerRetryBaseDelay.TotalMilliseconds);
+                double delayMs = attempt == 0 ? baseMs * 1.25 : baseMs * 2.5;
                 TimeSpan wait = TimeSpan.FromMilliseconds(delayMs);
                 emitEvent(new AgentEvent(AgentEventKind.Progress,
-                    $"Сервер перегружен (HTTP {ex.StatusCode}): повтор {attempt + 1}/{maxRetries} через {wait.TotalSeconds:0.#} сек..."));
+                    $"Сервер перегружен (HTTP {ex.StatusCode}): повтор {attempt + 1}/{maxTransientRetries} через {wait.TotalSeconds:0.#} сек..."));
                 await Task.Delay(wait, ct).ConfigureAwait(false);
             }
         }

@@ -45,12 +45,11 @@ public static class AiProviderCatalog
         AiProviderKind.GoogleGemini =>
         [
             new(AiProviderKind.GoogleGemini, "gemini-3.8-flash", "Gemini 3.8 Flash", 1_048_576, "Рекомендуемая модель Google AI Studio"),
-            new(AiProviderKind.GoogleGemini, "gemini-2.0-flash", "Gemini 2.0 Flash", 1_048_576, "Быстрая стабильная модель • Free Tier"),
-            new(AiProviderKind.GoogleGemini, "gemini-1.5-flash", "Gemini 1.5 Flash", 1_048_576, "Резервная быстрая модель"),
-            new(AiProviderKind.GoogleGemini, "gemini-4-argon", "Gemini 4 Argon", 1_048_576, "Флагман 4.x • требует Billing (Free = 0)"),
-            new(AiProviderKind.GoogleGemini, "gemini-2.5-pro", "Gemini 2.5 Pro", 1_048_576, "Сложный код и рассуждения"),
+            new(AiProviderKind.GoogleGemini, "gemini-1.5-flash", "Gemini 1.5 Flash", 1_048_576, "Высокая доступность • резерв без 503"),
+            new(AiProviderKind.GoogleGemini, "gemini-1.5-pro", "Gemini 1.5 Pro", 2_097_152, "Углубленный анализ • 2M токенов"),
+            new(AiProviderKind.GoogleGemini, "gemini-1.5-flash-8b", "Gemini 1.5 Flash-8B", 1_048_576, "Сверхбыстрая компактная модель"),
             new(AiProviderKind.GoogleGemini, "gemini-2.5-computer-use-preview-10-2025", "Gemini 2.5 Computer Use", 131_072, "Превью управления экраном"),
-            new(AiProviderKind.GoogleGemini, "gemini-2.5-flash", "Gemini 2.5 Flash", 1_048_576, "Устарела для новых ключей (HTTP 404)")
+            new(AiProviderKind.GoogleGemini, "gemini-4-argon", "Gemini 4 Argon", 1_048_576, "Флагман 4.x • требует Billing (Free = 0)")
         ],
         AiProviderKind.OpenAI =>
         [
