@@ -130,4 +130,74 @@ public sealed class ActionSecurityGuardAndNetworkTests
         Assert.False(GeminiApiClient.ValidateGoogleCertificate(null!, validSanCert, null, SslPolicyErrors.RemoteCertificateChainErrors));
         Assert.True(GeminiApiClient.ValidateGoogleCertificate(null!, validSanCert, null, SslPolicyErrors.None));
     }
+
+    [Fact]
+    public void ActionSecurityGuard_AcceptsGeminiComputerUseNativeActionsAndPointFormats()
+    {
+        var guard = new ActionSecurityGuard();
+
+        // 1. Native "click" with "point": [500, 500]
+        using var clickPointDoc = JsonDocument.Parse("""{"point":[500, 500]}""");
+        var res1 = guard.EvaluateAction("click", clickPointDoc.RootElement, 1, 1920, 1080);
+        Assert.Equal(ActionVerdict.Allow, res1.Verdict);
+
+        // 2. Native "click" with "coordinate": [300, 400] and "button": "left"
+        using var clickCoordDoc = JsonDocument.Parse("""{"coordinate":[300, 400], "button": "left"}""");
+        var res2 = guard.EvaluateAction("click", clickCoordDoc.RootElement, 2, 1920, 1080);
+        Assert.Equal(ActionVerdict.Allow, res2.Verdict);
+
+        // 3. "move" with "point": [100, 200]
+        using var moveDoc = JsonDocument.Parse("""{"point":[100, 200]}""");
+        var res3 = guard.EvaluateAction("move", moveDoc.RootElement, 3, 1920, 1080);
+        Assert.Equal(ActionVerdict.Allow, res3.Verdict);
+
+        // 4. "type" with text
+        using var typeDoc = JsonDocument.Parse("""{"text":"hello world"}""");
+        var res4 = guard.EvaluateAction("type", typeDoc.RootElement, 4, 1920, 1080);
+        Assert.Equal(ActionVerdict.Allow, res4.Verdict);
+
+        // 5. "press_key" with key
+        using var pressKeyDoc = JsonDocument.Parse("""{"key":"Enter"}""");
+        var res5 = guard.EvaluateAction("press_key", pressKeyDoc.RootElement, 5, 1920, 1080);
+        Assert.Equal(ActionVerdict.Allow, res5.Verdict);
+
+        // 6. "click" with out of bounds coordinates [1200, 500]
+        using var badDoc = JsonDocument.Parse("""{"point":[1200, 500]}""");
+        var res6 = guard.EvaluateAction("click", badDoc.RootElement, 6, 1920, 1080);
+        Assert.Equal(ActionVerdict.Block, res6.Verdict);
+    }
+
+    [Fact]
+    public void ActionSecurityGuard_TryExtractPoint_SupportsVariousFormats()
+    {
+        // 1. Direct x, y
+        using var d1 = JsonDocument.Parse("""{"x": 120, "y": 340}""");
+        Assert.True(ActionSecurityGuard.TryExtractPoint(d1.RootElement, "x", "y", out int x1, out int y1));
+        Assert.Equal(120, x1);
+        Assert.Equal(340, y1);
+
+        // 2. Point array
+        using var d2 = JsonDocument.Parse("""{"point": [550, 750]}""");
+        Assert.True(ActionSecurityGuard.TryExtractPoint(d2.RootElement, "x", "y", out int x2, out int y2));
+        Assert.Equal(550, x2);
+        Assert.Equal(750, y2);
+
+        // 3. Coordinate array
+        using var d3 = JsonDocument.Parse("""{"coordinate": [11, 22]}""");
+        Assert.True(ActionSecurityGuard.TryExtractPoint(d3.RootElement, "x", "y", out int x3, out int y3));
+        Assert.Equal(11, x3);
+        Assert.Equal(22, y3);
+
+        // 4. Nested object in point
+        using var d4 = JsonDocument.Parse("""{"point": {"x": 88, "y": 99}}""");
+        Assert.True(ActionSecurityGuard.TryExtractPoint(d4.RootElement, "x", "y", out int x4, out int y4));
+        Assert.Equal(88, x4);
+        Assert.Equal(99, y4);
+
+        // 5. Destination point for drag
+        using var d5 = JsonDocument.Parse("""{"destination_point": [400, 600]}""");
+        Assert.True(ActionSecurityGuard.TryExtractPoint(d5.RootElement, "destination_x", "destination_y", out int x5, out int y5));
+        Assert.Equal(400, x5);
+        Assert.Equal(600, y5);
+    }
 }

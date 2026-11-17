@@ -135,29 +135,56 @@ public sealed partial class ActionSecurityGuard
 
         switch (functionName)
         {
+            case "click":
             case "click_at":
+            case "left_click":
+            case "left_click_at":
+            case "double_click":
             case "double_click_at":
+            case "double_click_coordinate":
+            case "right_click":
             case "right_click_at":
+            case "triple_click":
             case "triple_click_at":
+            case "middle_click":
             case "middle_click_at":
+            case "hover":
             case "hover_at":
+            case "move":
+            case "move_cursor":
+            case "move_to":
+            case "mouse_move":
             case "mouse_down":
             case "mouse_up":
             {
-                if (!TryReadNormalizedPoint(args, "x", "y", out int nx, out int ny, out string? err))
-                    return new ActionPolicyDecision(ActionVerdict.Block, err!, functionName);
+                if (TryExtractPoint(args, "x", "y", out int nx, out int ny))
+                {
+                    if (nx < 0 || nx > 1000 || ny < 0 || ny > 1000)
+                        return new ActionPolicyDecision(ActionVerdict.Block, $"Coordinates ({nx}, {ny}) out of valid normalized range [0..1000].", functionName);
 
-                var (px, py) = MapToScreen(nx, ny, screenWidth, screenHeight, screenOriginX, screenOriginY);
-                if (!CheckTargetWindowBounds(px, py, out string? boundsErr))
-                    return new ActionPolicyDecision(ActionVerdict.Block, boundsErr!, $"{functionName}({nx},{ny})");
+                    var (px, py) = MapToScreen(nx, ny, screenWidth, screenHeight, screenOriginX, screenOriginY);
+                    if (!CheckTargetWindowBounds(px, py, out string? boundsErr))
+                        return new ActionPolicyDecision(ActionVerdict.Block, boundsErr!, $"{functionName}({nx},{ny})");
 
-                return new ActionPolicyDecision(ActionVerdict.Allow, "OK", $"{functionName}({nx},{ny})");
+                    return new ActionPolicyDecision(ActionVerdict.Allow, "OK", $"{functionName}({nx},{ny})");
+                }
+
+                if (Win32Interop.GetCursorPos(out var cur))
+                {
+                    if (!CheckTargetWindowBounds(cur.X, cur.Y, out string? boundsErr))
+                        return new ActionPolicyDecision(ActionVerdict.Block, boundsErr!, functionName);
+                }
+
+                return new ActionPolicyDecision(ActionVerdict.Allow, "OK", functionName);
             }
 
+            case "drag":
             case "drag_and_drop":
+            case "drag_and_drop_at":
             {
+                string? err1 = null;
                 string? err2 = null;
-                if (!TryReadNormalizedPoint(args, "x", "y", out int sx, out int sy, out string? err1) ||
+                if (!TryReadNormalizedPoint(args, "x", "y", out int sx, out int sy, out err1) ||
                     !TryReadNormalizedPoint(args, "destination_x", "destination_y", out int dx, out int dy, out err2))
                     return new ActionPolicyDecision(ActionVerdict.Block, err1 ?? err2!, functionName);
 
@@ -170,32 +197,40 @@ public sealed partial class ActionSecurityGuard
                 return new ActionPolicyDecision(ActionVerdict.Allow, "OK", $"{functionName}({sx},{sy}->{dx},{dy})");
             }
 
+            case "scroll":
             case "scroll_at":
             {
-                if (!TryReadNormalizedPoint(args, "x", "y", out int nx, out int ny, out string? err))
-                    return new ActionPolicyDecision(ActionVerdict.Block, err!, functionName);
+                if (TryExtractPoint(args, "x", "y", out int nx, out int ny))
+                {
+                    var (px, py) = MapToScreen(nx, ny, screenWidth, screenHeight, screenOriginX, screenOriginY);
+                    if (!CheckTargetWindowBounds(px, py, out string? boundsErr))
+                        return new ActionPolicyDecision(ActionVerdict.Block, boundsErr!, $"{functionName}({nx},{ny})");
 
-                var (px, py) = MapToScreen(nx, ny, screenWidth, screenHeight, screenOriginX, screenOriginY);
-                if (!CheckTargetWindowBounds(px, py, out string? boundsErr))
-                    return new ActionPolicyDecision(ActionVerdict.Block, boundsErr!, $"{functionName}({nx},{ny})");
+                    return new ActionPolicyDecision(ActionVerdict.Allow, "OK", $"{functionName}({nx},{ny})");
+                }
 
-                return new ActionPolicyDecision(ActionVerdict.Allow, "OK", $"{functionName}({nx},{ny})");
+                return new ActionPolicyDecision(ActionVerdict.Allow, "OK", functionName);
             }
 
             case "scroll_document":
+            case "wait":
             case "wait_5_seconds":
+            case "sleep":
             case "go_back":
             case "go_forward":
                 return new ActionPolicyDecision(ActionVerdict.Allow, "OK", functionName);
 
+            case "type":
+            case "type_text":
             case "type_text_at":
+            case "write":
             {
-                if (!TryReadNormalizedPoint(args, "x", "y", out int nx, out int ny, out string? err))
-                    return new ActionPolicyDecision(ActionVerdict.Block, err!, functionName);
-
-                var (px, py) = MapToScreen(nx, ny, screenWidth, screenHeight, screenOriginX, screenOriginY);
-                if (!CheckTargetWindowBounds(px, py, out string? boundsErr))
-                    return new ActionPolicyDecision(ActionVerdict.Block, boundsErr!, $"{functionName}({nx},{ny})");
+                if (TryExtractPoint(args, "x", "y", out int nx, out int ny))
+                {
+                    var (px, py) = MapToScreen(nx, ny, screenWidth, screenHeight, screenOriginX, screenOriginY);
+                    if (!CheckTargetWindowBounds(px, py, out string? boundsErr))
+                        return new ActionPolicyDecision(ActionVerdict.Block, boundsErr!, $"{functionName}({nx},{ny})");
+                }
 
                 string text = args.TryGetProperty("text", out var tEl) ? tEl.GetString() ?? string.Empty : string.Empty;
                 if (text.Length > 8192)
@@ -205,14 +240,18 @@ public sealed partial class ActionSecurityGuard
                 {
                     return new ActionPolicyDecision(
                         ActionVerdict.RequireConfirmation,
-                        "Potentially dangerous command/shell text detected in type_text_at. Explicit user approval required.",
-                        $"{functionName}({nx},{ny})");
+                        "Potentially dangerous command/shell text detected in type. Explicit user approval required.",
+                        $"{functionName}(len={text.Length})");
                 }
 
-                return new ActionPolicyDecision(ActionVerdict.Allow, "OK", $"{functionName}({nx},{ny}, len={text.Length})");
+                return new ActionPolicyDecision(ActionVerdict.Allow, "OK", $"{functionName}(len={text.Length})");
             }
 
             case "key_combination":
+            case "press_key":
+            case "key_press":
+            case "press_keys":
+            case "hotkey":
             {
                 string keys = ReadKeysString(args);
                 if (string.IsNullOrWhiteSpace(keys))
@@ -297,28 +336,99 @@ public sealed partial class ActionSecurityGuard
         return true;
     }
 
+    public static bool TryExtractPoint(JsonElement args, string xProp, string yProp, out int x, out int y)
+    {
+        x = 0;
+        y = 0;
+        if (args.ValueKind != JsonValueKind.Object) return false;
+
+        // 1. Direct properties (e.g. "x", "y")
+        if (args.TryGetProperty(xProp, out var xEl) && args.TryGetProperty(yProp, out var yEl) &&
+            TryGetFiniteDouble(xEl, out double dx) && TryGetFiniteDouble(yEl, out double dy))
+        {
+            x = (int)Math.Round(dx);
+            y = (int)Math.Round(dy);
+            return true;
+        }
+
+        // 2. Check "point" or "coordinate" or "coordinates" or "position" array [x, y]
+        string[] arrayProps = ["point", "coordinate", "coordinates", "position", "coords"];
+        foreach (string prop in arrayProps)
+        {
+            if (args.TryGetProperty(prop, out var arrEl))
+            {
+                if (arrEl.ValueKind == JsonValueKind.Array && arrEl.GetArrayLength() >= 2)
+                {
+                    if (TryGetFiniteDouble(arrEl[0], out double ax) && TryGetFiniteDouble(arrEl[1], out double ay))
+                    {
+                        x = (int)Math.Round(ax);
+                        y = (int)Math.Round(ay);
+                        return true;
+                    }
+                }
+                else if (arrEl.ValueKind == JsonValueKind.Object)
+                {
+                    if (arrEl.TryGetProperty(xProp, out var oxEl) && arrEl.TryGetProperty(yProp, out var oyEl) &&
+                        TryGetFiniteDouble(oxEl, out double ox) && TryGetFiniteDouble(oyEl, out double oy))
+                    {
+                        x = (int)Math.Round(ox);
+                        y = (int)Math.Round(oy);
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // 3. Check destination / end coordinates for drag
+        if (xProp.Contains("destination", StringComparison.OrdinalIgnoreCase) || xProp.Contains("end", StringComparison.OrdinalIgnoreCase))
+        {
+            string[] destProps = ["destination_point", "end_point", "destination", "target", "to"];
+            foreach (string prop in destProps)
+            {
+                if (args.TryGetProperty(prop, out var arrEl))
+                {
+                    if (arrEl.ValueKind == JsonValueKind.Array && arrEl.GetArrayLength() >= 2)
+                    {
+                        if (TryGetFiniteDouble(arrEl[0], out double ax) && TryGetFiniteDouble(arrEl[1], out double ay))
+                        {
+                            x = (int)Math.Round(ax);
+                            y = (int)Math.Round(ay);
+                            return true;
+                        }
+                    }
+                    else if (arrEl.ValueKind == JsonValueKind.Object)
+                    {
+                        if (arrEl.TryGetProperty("x", out var oxEl) && arrEl.TryGetProperty("y", out var oyEl) &&
+                            TryGetFiniteDouble(oxEl, out double ox) && TryGetFiniteDouble(oyEl, out double oy))
+                        {
+                            x = (int)Math.Round(ox);
+                            y = (int)Math.Round(oy);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
     private static bool TryReadNormalizedPoint(JsonElement args, string xProp, string yProp, out int x, out int y, out string? error)
     {
         x = 0;
         y = 0;
-        if (args.ValueKind != JsonValueKind.Object ||
-            !args.TryGetProperty(xProp, out var xEl) ||
-            !args.TryGetProperty(yProp, out var yEl) ||
-            !TryGetFiniteDouble(xEl, out double dx) ||
-            !TryGetFiniteDouble(yEl, out double dy))
+        if (!TryExtractPoint(args, xProp, yProp, out x, out y))
         {
             error = $"Missing or invalid coordinates ({xProp}, {yProp}).";
             return false;
         }
 
-        if (dx < 0 || dx > 1000 || dy < 0 || dy > 1000)
+        if (x < 0 || x > 1000 || y < 0 || y > 1000)
         {
-            error = $"Coordinates ({dx}, {dy}) out of valid normalized range [0..1000].";
+            error = $"Coordinates ({x}, {y}) out of valid normalized range [0..1000].";
             return false;
         }
 
-        x = (int)Math.Round(dx);
-        y = (int)Math.Round(dy);
         error = null;
         return true;
     }

@@ -68,15 +68,51 @@ public sealed class InputAutomationService : IInputAutomationService
     {
         switch (functionName)
         {
+            case "click":
             case "click_at":
+            case "left_click":
+            case "left_click_at":
             {
                 var (px, py) = ReadAndMapPoint(args, "x", "y", screenWidth, screenHeight, originX, originY);
                 MoveCursor(px, py);
+
+                string btn = args.TryGetProperty("button", out var bEl) ? bEl.GetString()?.ToLowerInvariant() ?? "left" : "left";
+                int count = args.TryGetProperty("click_count", out var cEl) && cEl.TryGetInt32(out int cnt) ? cnt : 1;
+
+                if (btn == "right")
+                {
+                    ClickMouse(Win32Interop.MOUSEEVENTF_RIGHTDOWN, Win32Interop.MOUSEEVENTF_RIGHTUP);
+                    return $"Right-clicked at ({px}, {py})";
+                }
+                if (btn == "middle")
+                {
+                    ClickMouse(Win32Interop.MOUSEEVENTF_MIDDLEDOWN, Win32Interop.MOUSEEVENTF_MIDDLEUP);
+                    return $"Middle-clicked at ({px}, {py})";
+                }
+                if (count == 2 || btn == "double")
+                {
+                    ClickMouse(Win32Interop.MOUSEEVENTF_LEFTDOWN, Win32Interop.MOUSEEVENTF_LEFTUP);
+                    await Task.Delay(55, ct).ConfigureAwait(false);
+                    ClickMouse(Win32Interop.MOUSEEVENTF_LEFTDOWN, Win32Interop.MOUSEEVENTF_LEFTUP);
+                    return $"Double-clicked at ({px}, {py})";
+                }
+                if (count == 3 || btn == "triple")
+                {
+                    for (int i = 0; i < 3; i++)
+                    {
+                        ClickMouse(Win32Interop.MOUSEEVENTF_LEFTDOWN, Win32Interop.MOUSEEVENTF_LEFTUP);
+                        if (i < 2) await Task.Delay(50, ct).ConfigureAwait(false);
+                    }
+                    return $"Triple-clicked at ({px}, {py})";
+                }
+
                 ClickMouse(Win32Interop.MOUSEEVENTF_LEFTDOWN, Win32Interop.MOUSEEVENTF_LEFTUP);
                 return $"Clicked at ({px}, {py})";
             }
 
+            case "double_click":
             case "double_click_at":
+            case "double_click_coordinate":
             {
                 var (px, py) = ReadAndMapPoint(args, "x", "y", screenWidth, screenHeight, originX, originY);
                 MoveCursor(px, py);
@@ -86,6 +122,7 @@ public sealed class InputAutomationService : IInputAutomationService
                 return $"Double-clicked at ({px}, {py})";
             }
 
+            case "triple_click":
             case "triple_click_at":
             {
                 var (px, py) = ReadAndMapPoint(args, "x", "y", screenWidth, screenHeight, originX, originY);
@@ -98,6 +135,7 @@ public sealed class InputAutomationService : IInputAutomationService
                 return $"Triple-clicked at ({px}, {py})";
             }
 
+            case "right_click":
             case "right_click_at":
             {
                 var (px, py) = ReadAndMapPoint(args, "x", "y", screenWidth, screenHeight, originX, originY);
@@ -106,6 +144,7 @@ public sealed class InputAutomationService : IInputAutomationService
                 return $"Right-clicked at ({px}, {py})";
             }
 
+            case "middle_click":
             case "middle_click_at":
             {
                 var (px, py) = ReadAndMapPoint(args, "x", "y", screenWidth, screenHeight, originX, originY);
@@ -114,30 +153,51 @@ public sealed class InputAutomationService : IInputAutomationService
                 return $"Middle-clicked at ({px}, {py})";
             }
 
+            case "hover":
             case "hover_at":
+            case "move":
+            case "move_cursor":
+            case "move_to":
+            case "mouse_move":
             {
                 var (px, py) = ReadAndMapPoint(args, "x", "y", screenWidth, screenHeight, originX, originY);
                 MoveCursor(px, py);
-                return $"Hovered at ({px}, {py})";
+                return $"Moved cursor to ({px}, {py})";
             }
 
             case "mouse_down":
             {
                 var (px, py) = ReadAndMapPoint(args, "x", "y", screenWidth, screenHeight, originX, originY);
                 MoveCursor(px, py);
-                SendMouseFlags(Win32Interop.MOUSEEVENTF_LEFTDOWN, 0);
-                return $"Mouse down at ({px}, {py})";
+                string btn = args.TryGetProperty("button", out var bEl) ? bEl.GetString()?.ToLowerInvariant() ?? "left" : "left";
+                uint flag = btn switch
+                {
+                    "right" => Win32Interop.MOUSEEVENTF_RIGHTDOWN,
+                    "middle" => Win32Interop.MOUSEEVENTF_MIDDLEDOWN,
+                    _ => Win32Interop.MOUSEEVENTF_LEFTDOWN
+                };
+                SendMouseFlags(flag, 0);
+                return $"Mouse down ({btn}) at ({px}, {py})";
             }
 
             case "mouse_up":
             {
                 var (px, py) = ReadAndMapPoint(args, "x", "y", screenWidth, screenHeight, originX, originY);
                 MoveCursor(px, py);
-                SendMouseFlags(Win32Interop.MOUSEEVENTF_LEFTUP, 0);
-                return $"Mouse up at ({px}, {py})";
+                string btn = args.TryGetProperty("button", out var bEl) ? bEl.GetString()?.ToLowerInvariant() ?? "left" : "left";
+                uint flag = btn switch
+                {
+                    "right" => Win32Interop.MOUSEEVENTF_RIGHTUP,
+                    "middle" => Win32Interop.MOUSEEVENTF_MIDDLEUP,
+                    _ => Win32Interop.MOUSEEVENTF_LEFTUP
+                };
+                SendMouseFlags(flag, 0);
+                return $"Mouse up ({btn}) at ({px}, {py})";
             }
 
+            case "drag":
             case "drag_and_drop":
+            case "drag_and_drop_at":
             {
                 var (sx, sy) = ReadAndMapPoint(args, "x", "y", screenWidth, screenHeight, originX, originY);
                 var (dx, dy) = ReadAndMapPoint(args, "destination_x", "destination_y", screenWidth, screenHeight, originX, originY);
@@ -157,16 +217,22 @@ public sealed class InputAutomationService : IInputAutomationService
                 return $"Dragged from ({sx},{sy}) to ({dx},{dy})";
             }
 
+            case "type":
+            case "type_text":
             case "type_text_at":
+            case "write":
             {
-                var (px, py) = ReadAndMapPoint(args, "x", "y", screenWidth, screenHeight, originX, originY);
-                string text = args.TryGetProperty("text", out var tEl) ? tEl.GetString() ?? string.Empty : string.Empty;
-                bool clearBefore = !args.TryGetProperty("clear_before_typing", out var cEl) || cEl.GetBoolean();
-                bool pressEnter = args.TryGetProperty("press_enter", out var eEl) && eEl.GetBoolean();
+                if (ActionSecurityGuard.TryExtractPoint(args, "x", "y", out int nx, out int ny))
+                {
+                    var (px, py) = ActionSecurityGuard.MapToScreen(nx, ny, screenWidth, screenHeight, originX, originY);
+                    MoveCursor(px, py);
+                    ClickMouse(Win32Interop.MOUSEEVENTF_LEFTDOWN, Win32Interop.MOUSEEVENTF_LEFTUP);
+                    await Task.Delay(80, ct).ConfigureAwait(false);
+                }
 
-                MoveCursor(px, py);
-                ClickMouse(Win32Interop.MOUSEEVENTF_LEFTDOWN, Win32Interop.MOUSEEVENTF_LEFTUP);
-                await Task.Delay(80, ct).ConfigureAwait(false);
+                string text = args.TryGetProperty("text", out var tEl) ? tEl.GetString() ?? string.Empty : string.Empty;
+                bool clearBefore = args.TryGetProperty("clear_before_typing", out var cEl) && cEl.GetBoolean();
+                bool pressEnter = args.TryGetProperty("press_enter", out var eEl) && eEl.GetBoolean();
 
                 if (clearBefore)
                 {
@@ -184,24 +250,34 @@ public sealed class InputAutomationService : IInputAutomationService
                     SendSingleVirtualKey(0x0D);
                 }
 
-                return $"Typed {text.Length} chars at ({px}, {py})";
+                return $"Typed {text.Length} chars: '{text}'";
             }
 
             case "key_combination":
+            case "press_key":
+            case "key_press":
+            case "press_keys":
+            case "hotkey":
             {
                 string keys = ReadKeysString(args);
                 SendKeyCombination(keys);
                 return $"Pressed keys: {keys}";
             }
 
+            case "scroll":
             case "scroll_at":
             {
-                var (px, py) = ReadAndMapPoint(args, "x", "y", screenWidth, screenHeight, originX, originY);
-                MoveCursor(px, py);
+                if (ActionSecurityGuard.TryExtractPoint(args, "x", "y", out int nx, out int ny))
+                {
+                    var (px, py) = ActionSecurityGuard.MapToScreen(nx, ny, screenWidth, screenHeight, originX, originY);
+                    MoveCursor(px, py);
+                }
                 string dir = args.TryGetProperty("direction", out var dEl) ? dEl.GetString() ?? "down" : "down";
-                int mag = args.TryGetProperty("magnitude", out var mEl) && mEl.TryGetInt32(out int m) ? Math.Clamp(m, 1, 2000) : 400;
+                int mag = args.TryGetProperty("magnitude", out var mEl) && mEl.TryGetInt32(out int m) ? Math.Clamp(m, 1, 2000)
+                        : args.TryGetProperty("amount", out var aEl) && aEl.TryGetInt32(out int a) ? Math.Clamp(a, 1, 2000)
+                        : 400;
                 ExecuteScroll(dir, mag);
-                return $"Scrolled {dir} ({mag}) at ({px}, {py})";
+                return $"Scrolled {dir} ({mag})";
             }
 
             case "scroll_document":
@@ -212,11 +288,17 @@ public sealed class InputAutomationService : IInputAutomationService
                 return $"Scrolled document {dir} ({mag})";
             }
 
+            case "wait":
             case "wait_5_seconds":
-                await Task.Delay(5000, ct).ConfigureAwait(false);
-                return "Waited 5 seconds";
+            case "sleep":
+            {
+                int sec = args.TryGetProperty("seconds", out var sEl) && sEl.TryGetInt32(out int s) ? Math.Clamp(s, 1, 30) : 5;
+                await Task.Delay(sec * 1000, ct).ConfigureAwait(false);
+                return $"Waited {sec} seconds";
+            }
 
             case "navigate":
+            case "open_url":
             {
                 string url = args.TryGetProperty("url", out var uEl) ? uEl.GetString() ?? string.Empty : string.Empty;
                 if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) ||
@@ -249,9 +331,17 @@ public sealed class InputAutomationService : IInputAutomationService
         JsonElement args, string xProp, string yProp,
         int screenWidth, int screenHeight, int originX, int originY)
     {
-        int nx = args.TryGetProperty(xProp, out var xEl) ? (int)Math.Round(xEl.GetDouble()) : 0;
-        int ny = args.TryGetProperty(yProp, out var yEl) ? (int)Math.Round(yEl.GetDouble()) : 0;
-        return ActionSecurityGuard.MapToScreen(nx, ny, screenWidth, screenHeight, originX, originY);
+        if (ActionSecurityGuard.TryExtractPoint(args, xProp, yProp, out int nx, out int ny))
+        {
+            return ActionSecurityGuard.MapToScreen(nx, ny, screenWidth, screenHeight, originX, originY);
+        }
+
+        if (Win32Interop.GetCursorPos(out var pt))
+        {
+            return (pt.X, pt.Y);
+        }
+
+        return ActionSecurityGuard.MapToScreen(0, 0, screenWidth, screenHeight, originX, originY);
     }
 
     private static void MoveCursor(int px, int py)
