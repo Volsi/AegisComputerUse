@@ -539,25 +539,6 @@ public partial class MainWindow : Window
         }
         catch (GeminiApiException ex) when (ex.StatusCode is 401 or 403 or 429 or 500 or 502 or 503 or 504 or 529)
         {
-            // Auto-recovery: if user probed an unavailable model (like argon on free tier or 3.8-flash on overload), probe gemini-1.5-flash
-            if (targetProvider == AiProviderKind.GoogleGemini &&
-                !string.Equals(modelId, "gemini-1.5-flash", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    using SealedSecret retryKey = CreateTransientSealedSecretWithoutClearing(SettingsApiKeyBox);
-                    long flashMs = await _apiClient.ProbeModelAsync(retryKey, "gemini-1.5-flash", CancellationToken.None);
-                    SelectSettingsModelId("gemini-1.5-flash");
-                    SettingsAddSuccessText.Text = $"✓ Ваш API-ключ действителен и полностью работает! Модель «{modelId}» вернула {ex.StatusCode}, но резервная стабильная модель «gemini-1.5-flash» успешно ответила ({flashMs} мс). Выбор автоматически переключен на «gemini-1.5-flash» — нажмите «＋ Добавить нейросеть»!";
-                    SettingsAddSuccessText.Visibility = Visibility.Visible;
-                    return;
-                }
-                catch
-                {
-                    // Fall through to show the specific diagnosis message for original failure
-                }
-            }
-
             if (ex.StatusCode == 429)
             {
                 SettingsAddErrorText.Text = FormatRateLimitMessage(modelId, ex);
@@ -574,14 +555,7 @@ public partial class MainWindow : Window
         }
         catch (GeminiApiException ex) when (ex.StatusCode == 404)
         {
-            if (targetProvider == AiProviderKind.GoogleGemini && modelId.Contains("2.5-flash", StringComparison.OrdinalIgnoreCase))
-            {
-                SelectSettingsModelId("gemini-3.8-flash");
-                SettingsAddErrorText.Text = $"Модель «{modelId}» больше недоступна для новых ключей Google (HTTP 404). Выбор автоматически переключен на актуальную «gemini-3.8-flash». Нажмите «⚡ Проверить ключ»!";
-                SettingsAddErrorText.Visibility = Visibility.Visible;
-                return;
-            }
-            SettingsAddErrorText.Text = $"Модель «{modelId}» не найдена (HTTP 404). Нажмите «⚡ Определить доступные модели», чтобы загрузить актуальный список моделей.";
+            SettingsAddErrorText.Text = $"Модель «{modelId}» не найдена (HTTP 404). Google не предоставляет эту модель для вашего API-ключа или версии v1beta. Нажмите «⚡ Определить доступные модели», чтобы увидеть список работающих нейросетей.";
             SettingsAddErrorText.Visibility = Visibility.Visible;
         }
         catch (Exception ex)
@@ -2034,17 +2008,7 @@ public partial class MainWindow : Window
     {
         if (_activeModel is { Provider: AiProviderKind.GoogleGemini, Secret.IsDisposed: false } gemModel)
         {
-            try
-            {
-                return await _apiClient.TranscribeAudioAsync(gemModel.Secret, gemModel.ModelId, wav, CancellationToken.None);
-            }
-            catch (GeminiApiException ex) when (ex.StatusCode is 500 or 502 or 503 or 504 or 529 &&
-                                                AutoFallbackOnOverloadCheck.IsChecked == true &&
-                                                !string.Equals(gemModel.ModelId, "gemini-1.5-flash", StringComparison.OrdinalIgnoreCase))
-            {
-                AddStatusCard("АВТО-РЕЗЕРВ ГОЛОСА", $"Модель «{gemModel.ModelId}» перегружена (HTTP {ex.StatusCode}) — распознаю речь через резервную gemini-1.5-flash.", "#38BDF8", "#0F1B29", "#1E3A5F", "🔄");
-                return await _apiClient.TranscribeAudioAsync(gemModel.Secret, "gemini-1.5-flash", wav, CancellationToken.None);
-            }
+            return await _apiClient.TranscribeAudioAsync(gemModel.Secret, gemModel.ModelId, wav, CancellationToken.None);
         }
         if (_activeModel is { Provider: AiProviderKind.OpenAI, Secret.IsDisposed: false })
         {
@@ -2437,8 +2401,8 @@ public partial class MainWindow : Window
             var node = new JsonObject
             {
                 ["proxy"] = SettingsProxyBox?.Text.Trim() ?? string.Empty,
-                ["autoFallback"] = AutoFallbackOnOverloadCheck?.IsChecked ?? true,
-                ["autoSendVoice"] = AutoSendVoiceCheck?.IsChecked ?? true,
+                ["autoFallback"] = AutoFallbackOnOverloadCheck?.IsChecked ?? false,
+                ["autoSendVoice"] = AutoSendVoiceCheck?.IsChecked ?? false,
                 ["liveVoice"] = _isLiveVoiceActive,
                 ["realTimeScreen"] = RealTimeScreenWatchCheck?.IsChecked ?? true,
                 ["excludeCapture"] = ExcludeCaptureCheck?.IsChecked ?? false,
@@ -2596,62 +2560,10 @@ public partial class MainWindow : Window
         catch (GeminiApiException ex) when (ex.StatusCode == 404)
         {
             RollbackFailedHistory();
-            if (modelToRun.Provider == AiProviderKind.GoogleGemini &&
-                (modelToRun.ModelId.Contains("2.5-flash", StringComparison.OrdinalIgnoreCase) ||
-                 modelToRun.ModelId.Contains("2.0-flash", StringComparison.OrdinalIgnoreCase)) &&
-                _runCts is { IsCancellationRequested: false })
-            {
-                // Auto-upgrade from deprecated gemini-2.5-flash / gemini-2.0-flash to gemini-3.8-flash (or gemini-1.5-flash)
-                string upgradeModelId = "gemini-3.8-flash";
-                string upgradeDisplayName = "Gemini 3.8 Flash";
-                var upgradedEntry = EnsureOrActivateModelFromExistingGoogleKey(modelToRun, upgradeModelId, upgradeDisplayName);
-                var upgradedOptions = options with { Model = upgradeModelId };
-
-                AddStatusCard(
-                    "АВТО-ОБНОВЛЕНИЕ МОДЕЛИ (404)",
-                    $"Google сообщил: модель «{modelToRun.ModelId}» больше недоступна. Автоматически переключаю на актуальную «{upgradeDisplayName}» и повторяю запрос...",
-                    "#38BDF8", "#0F1B29", "#1E3A5F", "🔄");
-
-                AgentRunningLabel.Text = $"{upgradeDisplayName}...";
-                try
-                {
-                    await _agentRunAsync(agent, upgradedEntry.Secret, prompt, attachmentsSnapshot, upgradedOptions, _runCts.Token);
-                    _lastFailedPrompt = null;
-                    return;
-                }
-                catch (OperationCanceledException)
-                {
-                    RollbackFailedHistory();
-                    _lastFailedPrompt = new FailedPromptRetryData(prompt, attachmentsSnapshot, userThumbs);
-                    AddStatusCard("ОСТАНОВЛЕНО", "Выполнение прервано.", "#F59E0B", "#21190C", "#78350F", "⏹", BuildErrorActionBar(modelToRun, null));
-                    return;
-                }
-                catch (GeminiApiException upgradeEx) when (upgradeEx.StatusCode is 500 or 502 or 503 or 504 or 529)
-                {
-                    // If gemini-3.8-flash was hit by 503 during upgrade, fallback to gemini-1.5-flash
-                    var fallback15Options = options with { Model = "gemini-1.5-flash" };
-                    AddStatusCard("АВТО-РЕЗЕРВ (HTTP 503)", "Модель gemini-3.8-flash перегружена на стороне Google. Выполняю через стабильную gemini-1.5-flash...", "#38BDF8", "#0F1B29", "#1E3A5F", "🔄");
-                    try
-                    {
-                        await _agentRunAsync(agent, upgradedEntry.Secret, prompt, attachmentsSnapshot, fallback15Options, _runCts.Token);
-                        _lastFailedPrompt = null;
-                        return;
-                    }
-                    catch
-                    {
-                        // Fall through
-                    }
-                }
-                catch
-                {
-                    // Fall through
-                }
-            }
-
             _lastFailedPrompt = new FailedPromptRetryData(prompt, attachmentsSnapshot, userThumbs);
             AddStatusCard(
                 "МОДЕЛЬ НЕ НАЙДЕНА (404)",
-                $"{LogRedactor.Redact(ex.Message)}\n\n💡 Модель «{modelToRun.ModelId}» недоступна для вашего ключа или API v1beta.\nОткройте «⚙ Настройки» → выберите провайдера → вставьте API-ключ → нажмите «⚡ Определить доступные модели», чтобы загрузить актуальный список разрешенных моделей.",
+                $"{LogRedactor.Redact(ex.Message)}\n\n💡 Модель «{modelToRun.ModelId}» недоступна для вашего ключа или не поддерживается в API v1beta.\nОткройте «⚙ Настройки» → выберите работающую модель («gemini-flash-lite-latest» или «gemini-3.6-flash») или нажмите «⚡ Определить доступные модели».",
                 "#EF4444", "#261215", "#7F1D1D", "⛔",
                 BuildErrorActionBar(modelToRun, ex));
         }
@@ -2678,107 +2590,12 @@ public partial class MainWindow : Window
         catch (GeminiApiException ex) when (ex.StatusCode is 500 or 502 or 503 or 504 or 529)
         {
             RollbackFailedHistory();
-            bool executedBackup = false;
-
-            if (AutoFallbackOnOverloadCheck.IsChecked == true &&
-                _runCts is { IsCancellationRequested: false } &&
-                TryResolveBackupTarget(modelToRun, out var backupProvider, out var backupModelId, out var backupDisplayName, out var backupSecret))
-            {
-                executedBackup = true;
-                string backupCacheKey = $"{backupProvider}:{backupModelId}";
-                ComputerUseToolMode backupInitialMode = _adaptedModeByModel.TryGetValue(backupCacheKey, out var cachedBackupMode)
-                    ? cachedBackupMode
-                    : ComputerUseToolMode.Auto;
-
-                var backupOptions = options with
-                {
-                    Provider = backupProvider,
-                    Model = backupModelId,
-                    ToolMode = backupInitialMode
-                };
-
-                AddStatusCard(
-                    $"АВТО-РЕЗЕРВ (HTTP {ex.StatusCode})",
-                    $"Модель «{modelToRun.ModelId}» перегружена — автоматически выполняю этот запрос через резервную «{backupDisplayName} ({backupModelId})».",
-                    "#38BDF8", "#0F1B29", "#1E3A5F", "🔄");
-                AgentRunningLabel.Text = $"Резерв: {backupModelId}...";
-
-                var backupAgent = new ComputerUseAgent(_apiClient, _screenCapture, _inputAutomation, guard, fileCreator, policy, _multiProvider)
-                {
-                    TransientServerRetryBaseDelay = AgentRetryBaseDelayForTests
-                };
-
-                try
-                {
-                    await _agentRunAsync(backupAgent, backupSecret, prompt, attachmentsSnapshot, backupOptions, _runCts.Token);
-                    if (backupAgent.LastEffectiveToolMode != ComputerUseToolMode.Auto)
-                    {
-                        _adaptedModeByModel[backupCacheKey] = backupAgent.LastEffectiveToolMode;
-                    }
-                    _lastFailedPrompt = null;
-                }
-                catch (OperationCanceledException)
-                {
-                    RollbackFailedHistory();
-                    _lastFailedPrompt = new FailedPromptRetryData(prompt, attachmentsSnapshot, userThumbs);
-                    AddStatusCard("ОСТАНОВЛЕНО", "Выполнение резервной моделью прервано.", "#F59E0B", "#21190C", "#78350F", "⏹", BuildErrorActionBar(modelToRun, null));
-                }
-                catch (GeminiApiException backupEx) when (backupEx.StatusCode is 500 or 502 or 503 or 504 or 529)
-                {
-                    RollbackFailedHistory();
-                    _lastFailedPrompt = new FailedPromptRetryData(prompt, attachmentsSnapshot, userThumbs);
-                    AddStatusCard(
-                        $"СЕРВЕР ПЕРЕГРУЖЕН ({backupEx.StatusCode})",
-                        FormatTransientOverloadMessage(backupModelId, backupEx),
-                        "#F59E0B", "#21190C", "#78350F", "⏳",
-                        BuildErrorActionBar(modelToRun, backupEx));
-                }
-                catch (GeminiApiException backupEx) when (backupEx.StatusCode == 429)
-                {
-                    RollbackFailedHistory();
-                    _lastFailedPrompt = new FailedPromptRetryData(prompt, attachmentsSnapshot, userThumbs);
-                    AddStatusCard(
-                        "КВОТА API ИСЧЕРПАНА (429)",
-                        FormatRateLimitMessage(backupModelId, backupEx),
-                        "#F59E0B", "#21190C", "#78350F", "⏳",
-                        BuildErrorActionBar(modelToRun, backupEx));
-                }
-                catch (GeminiApiException backupEx) when (backupEx.StatusCode == 404 &&
-                                                         (backupModelId.Contains("2.5-flash", StringComparison.OrdinalIgnoreCase) ||
-                                                          backupModelId.Contains("2.0-flash", StringComparison.OrdinalIgnoreCase)))
-                {
-                    // If deprecated model failed with 404 as backup, fallback to gemini-1.5-flash!
-                    var fallback15Options = backupOptions with { Model = "gemini-1.5-flash" };
-                    AddStatusCard("АВТО-РЕЗЕРВ (HTTP 404)", "Модель устарела для вашего ключа. Выполняю через резервную gemini-1.5-flash...", "#38BDF8", "#0F1B29", "#1E3A5F", "🔄");
-                    try
-                    {
-                        await _agentRunAsync(backupAgent, backupSecret, prompt, attachmentsSnapshot, fallback15Options, _runCts.Token);
-                        _lastFailedPrompt = null;
-                    }
-                    catch (Exception ex3)
-                    {
-                        RollbackFailedHistory();
-                        _lastFailedPrompt = new FailedPromptRetryData(prompt, attachmentsSnapshot, userThumbs);
-                        AddStatusCard("ОШИБКА", LogRedactor.Redact(ex3.Message), "#EF4444", "#261215", "#7F1D1D", "⛔", BuildErrorActionBar(modelToRun, null));
-                    }
-                }
-                catch (Exception backupEx)
-                {
-                    RollbackFailedHistory();
-                    _lastFailedPrompt = new FailedPromptRetryData(prompt, attachmentsSnapshot, userThumbs);
-                    AddStatusCard("ОШИБКА", LogRedactor.Redact(backupEx.Message), "#EF4444", "#261215", "#7F1D1D", "⛔", BuildErrorActionBar(modelToRun, null));
-                }
-            }
-
-            if (!executedBackup)
-            {
-                _lastFailedPrompt = new FailedPromptRetryData(prompt, attachmentsSnapshot, userThumbs);
-                AddStatusCard(
-                    $"СЕРВЕР ПЕРЕГРУЖЕН ({ex.StatusCode})",
-                    FormatTransientOverloadMessage(modelToRun.ModelId, ex),
-                    "#F59E0B", "#21190C", "#78350F", "⏳",
-                    BuildErrorActionBar(modelToRun, ex));
-            }
+            _lastFailedPrompt = new FailedPromptRetryData(prompt, attachmentsSnapshot, userThumbs);
+            AddStatusCard(
+                $"СЕРВЕР ПЕРЕГРУЖЕН ({ex.StatusCode})",
+                FormatTransientOverloadMessage(modelToRun.ModelId, ex),
+                "#F59E0B", "#21190C", "#78350F", "⏳",
+                BuildErrorActionBar(modelToRun, ex));
         }
         catch (Exception ex)
         {
@@ -2861,8 +2678,6 @@ public partial class MainWindow : Window
             .Where(m => !m.Secret.IsDisposed &&
                         !(m.Provider == primary.Provider && string.Equals(m.ModelId, primary.ModelId, StringComparison.OrdinalIgnoreCase)))
             .OrderByDescending(m => m.Provider == primary.Provider)
-            .ThenByDescending(m => m.ModelId.Contains("1.5-flash", StringComparison.OrdinalIgnoreCase))
-            .ThenByDescending(m => m.ModelId.Contains("3.8-flash", StringComparison.OrdinalIgnoreCase))
             .ThenByDescending(m => m.ModelId.Contains("flash", StringComparison.OrdinalIgnoreCase))
             .FirstOrDefault();
 
@@ -2872,28 +2687,6 @@ public partial class MainWindow : Window
             modelId = candidate.ModelId;
             displayName = candidate.DisplayName;
             secret = candidate.Secret;
-            return true;
-        }
-
-        if (primary.Provider == AiProviderKind.GoogleGemini &&
-            !primary.Secret.IsDisposed &&
-            !string.Equals(primary.ModelId, "gemini-1.5-flash", StringComparison.OrdinalIgnoreCase))
-        {
-            provider = AiProviderKind.GoogleGemini;
-            modelId = "gemini-1.5-flash";
-            displayName = "Gemini 1.5 Flash";
-            secret = primary.Secret;
-            return true;
-        }
-
-        if (primary.Provider == AiProviderKind.GoogleGemini &&
-            !primary.Secret.IsDisposed &&
-            string.Equals(primary.ModelId, "gemini-1.5-flash", StringComparison.OrdinalIgnoreCase))
-        {
-            provider = AiProviderKind.GoogleGemini;
-            modelId = "gemini-1.5-pro";
-            displayName = "Gemini 1.5 Pro";
-            secret = primary.Secret;
             return true;
         }
 
@@ -2927,24 +2720,32 @@ public partial class MainWindow : Window
             return btn;
         }
 
+        var retryBtn = MakeActionButton($"🔄 Повторить запрос («{modelToRun.DisplayName}»)");
+        retryBtn.Click += async (_, _) =>
+        {
+            if (_runCts is not null) return;
+            await ExecutePromptAsync(retrySnapshot);
+        };
+        panel.Children.Add(retryBtn);
+
         if (modelToRun.Provider == AiProviderKind.GoogleGemini &&
-            !string.Equals(modelToRun.ModelId, "gemini-1.5-flash", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(modelToRun.ModelId, "gemini-flash-lite-latest", StringComparison.OrdinalIgnoreCase) &&
             !modelToRun.Secret.IsDisposed &&
             (apiEx is null || apiEx.StatusCode is 401 or 403 or 404 or 429 or 500 or 502 or 503 or 504 or 529))
         {
             bool alreadyConfigured = _configuredModels.Any(m =>
                 m.Provider == AiProviderKind.GoogleGemini &&
-                string.Equals(m.ModelId, "gemini-1.5-flash", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(m.ModelId, "gemini-flash-lite-latest", StringComparison.OrdinalIgnoreCase) &&
                 !m.Secret.IsDisposed);
 
             var switchBtn = MakeActionButton(alreadyConfigured
-                ? "⚡ Переключить на gemini-1.5-flash и повторить"
-                : "⚡ Подключить gemini-1.5-flash и повторить");
+                ? "⚡ Переключить на gemini-flash-lite-latest и повторить"
+                : "⚡ Подключить gemini-flash-lite-latest (квота активна)");
 
             switchBtn.Click += async (_, _) =>
             {
                 if (_runCts is not null || modelToRun.Secret.IsDisposed) return;
-                EnsureOrActivateModelFromExistingGoogleKey(modelToRun, "gemini-1.5-flash", "Gemini 1.5 Flash");
+                EnsureOrActivateModelFromExistingGoogleKey(modelToRun, "gemini-flash-lite-latest", "Gemini Flash-Lite");
                 await ExecutePromptAsync(retrySnapshot);
             };
             panel.Children.Add(switchBtn);
@@ -2976,13 +2777,12 @@ public partial class MainWindow : Window
             panel.Children.Add(lowBtn);
         }
 
-        var retryBtn = MakeActionButton("↻ Повторить запрос");
-        retryBtn.Click += async (_, _) =>
+        var settingsBtn = MakeActionButton("⚙ Настройки моделей");
+        settingsBtn.Click += (_, _) =>
         {
-            if (_runCts is not null) return;
-            await ExecutePromptAsync(retrySnapshot);
+            OpenSettingsModal("Models");
         };
-        panel.Children.Add(retryBtn);
+        panel.Children.Add(settingsBtn);
 
         return panel;
     }
@@ -2992,29 +2792,37 @@ public partial class MainWindow : Window
         string shortMsg = LogRedactor.Redact(ex.ExtractShortMessage());
         return $"Серверы Google для «{modelId}» сейчас испытывают высокую нагрузку (HTTP {ex.StatusCode} — пик спроса).\n" +
                $"• Ответ API: {shortMsg}\n\n" +
-               "💡 Это временный сбой / перегрузка на стороне серверов Google (ваш API-ключ действителен и работает):\n" +
-               "1. Включите опцию «Авто-резерв при перегрузке» (🎛) — при пике спроса Aegis автоматически выполнит задачу через стабильную gemini-1.5-flash.\n" +
-               "2. Либо повторите запрос через несколько секунд — автоматический бэкофф с повторами выполнит 4 попытки.";
+               "💡 Это временный сбой на стороне серверов Google (ваш API-ключ действителен и работает):\n" +
+               "1. Нажмите «🔄 Повторить запрос» — система выполнит повторные попытки с экспоненциальной задержкой.\n" +
+               "2. Либо переключитесь на модель «gemini-flash-lite-latest» или «gemini-3.6-flash».";
     }
 
     internal static string FormatRateLimitMessage(string modelId, GeminiApiException ex)
     {
         GeminiRateLimitInfo info = ex.ParseRateLimitInfo();
         string retryHint = info.FormatRetryDelayRussian() is string waitStr
-            ? $"\n• Повтор по API через: ~{waitStr}"
+            ? $"\n• Возобновление квоты Google через: ~{waitStr}"
             : string.Empty;
+
+        if (info.IsDailyLimit && info.IsFreeTier)
+        {
+            return $"Суточный лимит бесплатного тарифа Google для модели «{modelId}» исчерпан (максимум 20 запросов в день на проект).{retryHint}\n\n" +
+                   "💡 Варианты решения:\n" +
+                   "1. Нажмите «⚡ Подключить gemini-flash-lite-latest» ниже — у этой модели отдельная активная бесплатная квота и быстрый отклик (проверено).\n" +
+                   "2. Для снятия суточного лимита 20 запросов подключите биллинг (Pay-As-You-Go) в Google AI Studio (https://aistudio.google.com) к проекту вашего API-ключа.";
+        }
 
         if (info.IsZeroLimit && info.IsFreeTier)
         {
             return $"Модель «{modelId}» имеет нулевую бесплатную квоту (Free Tier limit: 0) для текущего API-ключа.{retryHint}\n\n" +
                    "💡 Как решить прямо сейчас:\n" +
-                   "1. Бесплатно: откройте «⚙ Настройки» → нажмите «🔄 По ключу» и подключите «gemini-3.8-flash» или «gemini-1.5-flash» (ранее gemini-2.5-flash) — для них в Aegis работает голос, создание файлов и Computer Use.\n" +
+                   "1. Бесплатно: нажмите «⚡ Подключить gemini-flash-lite-latest» ниже или выберите «gemini-3.6-flash» в ⚙ Настройках.\n" +
                    "2. Для «" + modelId + "»: подключите платный тариф (Billing / Pay-as-you-go) к проекту ключа в Google AI Studio (https://aistudio.google.com/docs/rate-limits).";
         }
 
         return $"Превышен лимит запросов или токенов для модели «{modelId}» (HTTP 429).{retryHint}\n" +
                $"{LogRedactor.Redact(info.ShortMessage)}\n\n" +
-               "💡 Подождите окончания лимита, переключитесь на более лёгкую модель (например, gemini-1.5-flash или gemini-2.5-flash) или проверьте квоту в https://ai.dev/rate-limit.";
+               "💡 Подождите окончания лимита или переключитесь на «gemini-flash-lite-latest» (кнопка ниже).";
     }
 
     private Task<string> _agentRunAsync(

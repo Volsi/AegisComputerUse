@@ -44,10 +44,10 @@ public static class AiProviderCatalog
     {
         AiProviderKind.GoogleGemini =>
         [
-            new(AiProviderKind.GoogleGemini, "gemini-3.8-flash", "Gemini 3.8 Flash", 1_048_576, "Рекомендуемая модель Google AI Studio"),
-            new(AiProviderKind.GoogleGemini, "gemini-1.5-flash", "Gemini 1.5 Flash", 1_048_576, "Высокая доступность • резерв без 503"),
-            new(AiProviderKind.GoogleGemini, "gemini-1.5-pro", "Gemini 1.5 Pro", 2_097_152, "Углубленный анализ • 2M токенов"),
-            new(AiProviderKind.GoogleGemini, "gemini-1.5-flash-8b", "Gemini 1.5 Flash-8B", 1_048_576, "Сверхбыстрая компактная модель"),
+            new(AiProviderKind.GoogleGemini, "gemini-flash-lite-latest", "Gemini Flash-Lite", 1_048_576, "Рекомендуемая быстрая • квота активна"),
+            new(AiProviderKind.GoogleGemini, "gemini-3.6-flash", "Gemini 3.6 Flash", 1_048_576, "Сбалансированная • квота активна"),
+            new(AiProviderKind.GoogleGemini, "gemini-3.5-flash", "Gemini 3.5 Flash", 1_048_576, "Высокое качество • квота активна"),
+            new(AiProviderKind.GoogleGemini, "gemini-3.8-flash", "Gemini 3.8 Flash", 1_048_576, "Лимит 20 запр/день на Free Tier"),
             new(AiProviderKind.GoogleGemini, "gemini-2.5-computer-use-preview-10-2025", "Gemini 2.5 Computer Use", 131_072, "Превью управления экраном"),
             new(AiProviderKind.GoogleGemini, "gemini-4-argon", "Gemini 4 Argon", 1_048_576, "Флагман 4.x • требует Billing (Free = 0)")
         ],

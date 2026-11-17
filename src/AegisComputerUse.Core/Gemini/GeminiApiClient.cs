@@ -670,7 +670,8 @@ public sealed record GeminiRateLimitInfo(
     bool IsZeroLimit,
     bool IsFreeTier,
     TimeSpan? RetryDelay,
-    string ShortMessage)
+    string ShortMessage,
+    bool IsDailyLimit = false)
 {
     public string? FormatRetryDelayRussian()
     {
@@ -742,6 +743,9 @@ public sealed partial class GeminiApiException : Exception
         bool isFree = body.Contains("FreeTier", StringComparison.OrdinalIgnoreCase) ||
                       body.Contains("Free Tier", StringComparison.OrdinalIgnoreCase) ||
                       body.Contains("free_tier", StringComparison.OrdinalIgnoreCase);
+        bool isDaily = body.Contains("per day", StringComparison.OrdinalIgnoreCase) ||
+                       body.Contains("daily", StringComparison.OrdinalIgnoreCase) ||
+                       body.Contains("requests per day limit exceeded", StringComparison.OrdinalIgnoreCase);
         TimeSpan? retryDelay = null;
 
         var m = RetryDelayJsonRegex().Match(body);
@@ -752,6 +756,6 @@ public sealed partial class GeminiApiException : Exception
         }
 
         string shortMsg = ExtractShortMessage();
-        return new GeminiRateLimitInfo(isZero, isFree, retryDelay, shortMsg);
+        return new GeminiRateLimitInfo(isZero, isFree, retryDelay, shortMsg, isDaily);
     }
 }

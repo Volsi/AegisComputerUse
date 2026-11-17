@@ -919,7 +919,7 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
 
         string uiMsg = MainWindow.FormatRateLimitMessage("gemini-4-argon", ex);
         Assert.Contains("Free Tier limit: 0", uiMsg, StringComparison.Ordinal);
-        Assert.Contains("gemini-2.5-flash", uiMsg, StringComparison.Ordinal);
+        Assert.Contains("gemini-flash-lite-latest", uiMsg, StringComparison.Ordinal);
         Assert.Contains("Billing", uiMsg, StringComparison.Ordinal);
     }
 
@@ -1344,7 +1344,7 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
     }
 
     [Fact]
-    public void MainWindow_AutoFallbackOnOverload_SwitchesToGemini25Flash_WithoutDuplicatingHistory()
+    public void MainWindow_503Overload_DoesNotAutoSwitchModel_ShowsOverloadCardAndRollsBackHistory()
     {
         string testVaultDir = Path.Combine(_sandboxDir, "UiAutoFallbackVault");
         Exception? staEx = null;
@@ -1363,14 +1363,7 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
         [
             (HttpStatusCode.ServiceUnavailable, google503Json),
             (HttpStatusCode.ServiceUnavailable, google503Json),
-            (HttpStatusCode.ServiceUnavailable, google503Json),
-            (HttpStatusCode.OK, """
-            {
-              "candidates": [{
-                "content": { "role": "model", "parts": [{ "text": "Выполнено через резервную Gemini 2.5 Flash." }] }
-              }]
-            }
-            """)
+            (HttpStatusCode.ServiceUnavailable, google503Json)
         ]);
 
         var thread = new Thread(() =>
@@ -1412,7 +1405,7 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
                     win.AddModelConfirmBtn.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
 
                     win.EnableComputerUseCheck.IsChecked = false;
-                    Assert.True(win.AutoFallbackOnOverloadCheck.IsChecked);
+                    Assert.False(win.AutoFallbackOnOverloadCheck.IsChecked);
 
                     win.PromptBox.Text = "Привет при пике 503";
                     Task runTask = win.ExecutePromptAsync();
@@ -1421,16 +1414,13 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
                     Dispatcher.PushFrame(frame);
                     runTask.GetAwaiter().GetResult();
 
-                    // 3 attempts on gemini-3.8-flash + 1 automatic failover request on gemini-1.5-flash with same key
-                    Assert.Equal(4, handler.RecordedRequests.Count);
-                    Assert.Equal("/v1beta/models/gemini-3.8-flash:generateContent", handler.RecordedRequests[0].Uri.AbsolutePath);
-                    Assert.Equal("/v1beta/models/gemini-1.5-flash:generateContent", handler.RecordedRequests[3].Uri.AbsolutePath);
-                    Assert.Equal("AIzaSyFallbackTestKey000111222333", handler.RecordedRequests[3].ApiKeyHeader);
-                    Assert.Equal(string.Empty, handler.RecordedRequests[3].Uri.Query);
+                    // 3 attempts on gemini-3.8-flash without silently switching models
+                    Assert.Equal(3, handler.RecordedRequests.Count);
+                    Assert.All(handler.RecordedRequests, r => Assert.Equal("/v1beta/models/gemini-3.8-flash:generateContent", r.Uri.AbsolutePath));
 
-                    // History has strictly [user, model] (no orphan duplicated user entries from failed attempts!)
-                    Assert.Equal(2, win.HistoryForTests.Count);
-                    Assert.Contains(win.ChatEntriesForTests, c => c.Header.Contains("АВТО-РЕЗЕРВ", StringComparison.Ordinal));
+                    // History is rolled back cleanly (no orphan duplicated user entries from failed attempts!)
+                    Assert.Empty(win.HistoryForTests);
+                    Assert.Contains(win.ChatEntriesForTests, c => c.Header.Contains("ПЕРЕГРУЖЕН", StringComparison.Ordinal));
                 }
                 finally
                 {
@@ -1533,9 +1523,9 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
                     var errorCard = win.ChatEntriesForTests.Last(c => c.Header.Contains("ПЕРЕГРУЖЕН", StringComparison.Ordinal));
                     var stack = Assert.IsType<StackPanel>(errorCard.RichVisual);
                     var actionWrap = Assert.IsType<WrapPanel>(stack.Children[1]);
-                    var switchBtn = actionWrap.Children.OfType<Button>().First(b => b.Content?.ToString()?.Contains("gemini-1.5-flash", StringComparison.Ordinal) == true);
+                    var switchBtn = actionWrap.Children.OfType<Button>().First(b => b.Content?.ToString()?.Contains("gemini-flash-lite-latest", StringComparison.Ordinal) == true);
 
-                    // 2. Click quick-switch action button -> clones secret cleanly into Gemini 1.5 Flash & runs retry!
+                    // 2. Click quick-switch action button -> clones secret cleanly into Gemini Flash-Lite & runs retry!
                     switchBtn.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                     var frame2 = new DispatcherFrame();
                     _ = Task.Run(async () =>
@@ -1547,10 +1537,10 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
                     });
                     Dispatcher.PushFrame(frame2);
 
-                    Assert.Equal("Gemini 1.5 Flash", win.UnifiedModelLabel.Text);
+                    Assert.Equal("Gemini Flash-Lite", win.UnifiedModelLabel.Text);
                     Assert.Equal(2, win.ModelRowsControl.Items.Count);
                     Assert.Equal(4, handler.RecordedRequests.Count);
-                    Assert.Equal("/v1beta/models/gemini-1.5-flash:generateContent", handler.RecordedRequests[3].Uri.AbsolutePath);
+                    Assert.Equal("/v1beta/models/gemini-flash-lite-latest:generateContent", handler.RecordedRequests[3].Uri.AbsolutePath);
                     Assert.Equal("AIzaSyActionBtnSecret000111222333", handler.RecordedRequests[3].ApiKeyHeader);
                     Assert.Equal(2, win.HistoryForTests.Count);
                 }
@@ -1700,7 +1690,7 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
     }
 
     [Fact]
-    public void MainWindow_ProbeModel_AutoDiscoversWorkingGemini25Flash_On403Or503()
+    public void MainWindow_ProbeModel_DoesNotAutoSwitchModel_ShowsAccurateErrorAndKeepsSelectedModel()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), $"AegisProbeTest_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
@@ -1711,8 +1701,7 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
             try
             {
                 var handler = new RecordingHandler([
-                    (HttpStatusCode.Forbidden, "{\"error\":{\"code\":403,\"message\":\"User location is not supported for the API use.\"}}"),
-                    (HttpStatusCode.OK, "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"pong\"}]}}]}")
+                    (HttpStatusCode.Forbidden, "{\"error\":{\"code\":403,\"message\":\"User location is not supported for the API use.\"}}")
                 ]);
 
                 using var apiClient = new GeminiApiClient(handler);
@@ -1731,16 +1720,14 @@ public sealed class GeminiAgentLoopIntegrationTests : IDisposable
                     _ = probeTask.ContinueWith(_ => dispatcher.BeginInvoke(() => frame.Continue = false));
                     Dispatcher.PushFrame(frame);
 
-                    Assert.Equal(Visibility.Visible, win.SettingsAddSuccessText.Visibility);
-                    Assert.Contains("Ваш API-ключ действителен и полностью работает", win.SettingsAddSuccessText.Text, StringComparison.Ordinal);
-                    Assert.Contains("gemini-1.5-flash", win.SettingsAddSuccessText.Text, StringComparison.Ordinal);
+                    Assert.Equal(Visibility.Visible, win.SettingsAddErrorText.Visibility);
+                    Assert.Contains("заблокирован по региону", win.SettingsAddErrorText.Text, StringComparison.OrdinalIgnoreCase);
 
                     var selectedInfo = win.GetSelectedSettingsModelInfo();
-                    Assert.Equal("gemini-1.5-flash", selectedInfo.ModelId);
+                    Assert.Equal("gemini-4-argon", selectedInfo.ModelId);
 
-                    Assert.Equal(2, handler.RecordedRequests.Count);
+                    Assert.Single(handler.RecordedRequests);
                     Assert.Equal("/v1beta/models/gemini-4-argon:generateContent", handler.RecordedRequests[0].Uri.AbsolutePath);
-                    Assert.Equal("/v1beta/models/gemini-1.5-flash:generateContent", handler.RecordedRequests[1].Uri.AbsolutePath);
                 }
                 finally
                 {
